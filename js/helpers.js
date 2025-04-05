@@ -1,4 +1,4 @@
-// Asignar color automáticamente a cada país
+
 const coloresPorPais = {};
 function obtenerColorParaPais(pais) {
   if (!coloresPorPais[pais]) {

@@ -1,3 +1,4 @@
+
 let mapa;
 let marcadores = [];
 
@@ -25,25 +26,17 @@ function agregarMarcador(dato) {
 
         const marcador = L.marker([lat, lon], { icon: icono })
           .addTo(mapa)
-          .bindPopup(`<b>${dato.Contraparte}</b><br>
-                      País: ${dato.Pais}<br>
-                      Tipo de convenio: ${dato["Tipo de convenio"]}<br>
-                      Año de firma: ${dato["Año de firma"]}<br>
-                      Vigente: ${dato["Vigente/No vigente"]}<br>
-                      Expediente: ${dato.Expediente}<br>
-                      <a href="${dato["Acceso en PDF"]}" target="_blank">Ver PDF</a>`);
+          .bindPopup(`
+            <b>${dato.Contraparte}</b><br>
+            País: ${dato.Pais}<br>
+            Tipo de convenio: ${dato["Tipo de convenio"]}<br>
+            Año: ${dato["Año de firma"]}<br>
+            Vigente: ${dato["Vigente/No vigente"]}<br>
+            Expediente: ${dato.Expediente}<br>
+            <a href="${dato["Acceso en PDF"]}" target="_blank">Ver PDF</a>
+          `);
 
-        marcadores.push({ marcador, pais: dato.Pais });
+        marcadores.push(marcador);
       }
     });
-}
-
-function filtrarPorPais(pais) {
-  marcadores.forEach(obj => {
-    if (!pais || obj.pais === pais) {
-      mapa.addLayer(obj.marcador);
-    } else {
-      mapa.removeLayer(obj.marcador);
-    }
-  });
 }
