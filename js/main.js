@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  inicializarMapa(); // Esta función asume que el contenedor ya está
+  inicializarMapa(); // Esta función asume que el contenedor ya está agregado al DOM
 
   const datos = await obtenerDatos();
   console.log(datos); // opcional
