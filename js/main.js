@@ -1,6 +1,7 @@
 
 window.onload = async () => {
   inicializarMapa();
+  console.log("Inicializando mapa...");
   const datos = await obtenerDatos();
   const paisesUnicos = [...new Set(datos.map(d => d.Pais))];
   const filtro = document.getElementById('filtro-pais');
