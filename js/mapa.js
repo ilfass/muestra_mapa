@@ -3,6 +3,14 @@ let mapa;
 let marcadores = [];
 
 function inicializarMapa() {
+  const contenedorMapa = document.getElementById('map');
+
+  if (!contenedorMapa) {
+    console.error('❌ Error: No se encontró el contenedor con id "map"');
+    return;
+  }
+
+  console.log('🗺️ Contenedor #map encontrado. Inicializando Leaflet...');
   mapa = L.map('map').setView([-34.6037, -58.3816], 3);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {

@@ -1,36 +1,58 @@
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('✅ DOMContentLoaded: el documento está cargado');
+
   const intentarInicializar = async () => {
     const contenedor = document.querySelector('.mapa-convenios');
     const filtro = document.getElementById('filtro-pais');
 
     if (!contenedor || !filtro) {
-      // Esperar 100ms y volver a intentar
-      setTimeout(intentarInicializar, 100);
+      console.warn('⏳ Esperando a que el contenedor y el filtro existan...');
+      setTimeout(intentarInicializar, 200);
       return;
     }
 
-    inicializarMapa();
+    console.log('✅ Contenedor y filtro encontrados. Inicializando mapa...');
 
-    const datos = await obtenerDatos();
+    // Agregamos mensaje visible para confirmar carga del plugin
+    const mensaje = document.createElement('p');
+    mensaje.textContent = '🗺️ Plugin del mapa cargado correctamente';
+    mensaje.style.color = 'green';
+    mensaje.style.fontWeight = 'bold';
+    contenedor.appendChild(mensaje);
 
-    const paisesUnicos = [...new Set(datos.map(d => d.Pais))];
+    try {
+      inicializarMapa();
+    } catch (e) {
+      console.error('❌ Error al inicializar el mapa:', e);
+      return;
+    }
 
-    paisesUnicos.forEach(p => {
-      const opcion = document.createElement('option');
-      opcion.value = p;
-      opcion.textContent = p;
-      filtro.appendChild(opcion);
-    });
+    try {
+      const datos = await obtenerDatos();
+      console.log('✅ Datos obtenidos del Google Sheet:', datos);
 
-    filtro.addEventListener('change', () => {
-      marcadores.forEach(m => mapa.removeLayer(m));
-      marcadores = [];
-      const seleccion = filtro.value;
-      const filtrados = seleccion ? datos.filter(d => d.Pais === seleccion) : datos;
-      filtrados.forEach(agregarMarcador);
-    });
+      const paisesUnicos = [...new Set(datos.map(d => d.Pais))];
 
-    datos.forEach(agregarMarcador);
+      paisesUnicos.forEach(p => {
+        const opcion = document.createElement('option');
+        opcion.value = p;
+        opcion.textContent = p;
+        filtro.appendChild(opcion);
+      });
+
+      filtro.addEventListener('change', () => {
+        console.log(`🔍 Filtrando por país: ${filtro.value}`);
+        marcadores.forEach(m => mapa.removeLayer(m));
+        marcadores = [];
+        const seleccion = filtro.value;
+        const filtrados = seleccion ? datos.filter(d => d.Pais === seleccion) : datos;
+        filtrados.forEach(agregarMarcador);
+      });
+
+      datos.forEach(agregarMarcador);
+    } catch (e) {
+      console.error('❌ Error al obtener datos:', e);
+    }
   };
 
   intentarInicializar();

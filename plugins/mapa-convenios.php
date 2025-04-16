@@ -28,7 +28,9 @@ function mapa_convenios_shortcode($atts) {
         'sheet' => '',
     ], $atts);
 
-    $output = '<div class="mapa-convenios" style="width: 100%; height: 600px;"></div>';
+    $output = '<div id="map" class="mapa-convenios" style="width: 100%; height: 600px;"></div>';
+    $output .= '<p id="mensaje-debug">🧪 El contenedor del mapa fue generado</p>';
+
 
     if (!empty($atts['sheet'])) {
         $sheet_url = esc_url($atts['sheet']);
