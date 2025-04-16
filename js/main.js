@@ -1,78 +1,51 @@
-// document.addEventListener('DOMContentLoaded', () => {
-//   console.log('✅ DOMContentLoaded: el documento está cargado');
+// main.js
+function inicializarApp() {
+  console.log("✅ Iniciando app...");
 
-//   const intentarInicializar = async () => {
-//     const contenedor = document.querySelector('.mapa-convenios');
-//     const filtro = document.getElementById('filtro-pais');
+  inicializarMapa();
+  obtenerDatos().then(datos => {
+    const filtro = document.getElementById('filtro-pais');
+    if (!filtro) {
+      console.warn("⚠️ No se encontró el filtro. Se saltea el filtrado.");
+    }
 
-//     if (!contenedor || !filtro) {
-//       console.warn('⏳ Esperando a que el contenedor y el filtro existan...');
-//       setTimeout(intentarInicializar, 200);
-//       return;
-//     }
+    const paisesUnicos = [...new Set(datos.map(d => d.Pais))];
 
-//     console.log('✅ Contenedor y filtro encontrados. Inicializando mapa...');
+    if (filtro) {
+      paisesUnicos.forEach(p => {
+        const opcion = document.createElement('option');
+        opcion.value = p;
+        opcion.textContent = p;
+        filtro.appendChild(opcion);
+      });
 
-//     // Agregamos mensaje visible para confirmar carga del plugin
-//     const mensaje = document.createElement('p');
-//     mensaje.textContent = '🗺️ Plugin del mapa cargado correctamente';
-//     mensaje.style.color = 'green';
-//     mensaje.style.fontWeight = 'bold';
-//     contenedor.appendChild(mensaje);
+      filtro.addEventListener('change', () => {
+        marcadores.forEach(m => mapa.removeLayer(m));
+        marcadores = [];
+        const seleccion = filtro.value;
+        const filtrados = seleccion ? datos.filter(d => d.Pais === seleccion) : datos;
+        filtrados.forEach(agregarMarcador);
+      });
+    }
 
-//     try {
-//       inicializarMapa();
-//     } catch (e) {
-//       console.error('❌ Error al inicializar el mapa:', e);
-//       return;
-//     }
+    datos.forEach(agregarMarcador);
+  });
+}
 
-//     try {
-//       const datos = await obtenerDatos();
-//       console.log('✅ Datos obtenidos del Google Sheet:', datos);
-
-//       const paisesUnicos = [...new Set(datos.map(d => d.Pais))];
-
-//       paisesUnicos.forEach(p => {
-//         const opcion = document.createElement('option');
-//         opcion.value = p;
-//         opcion.textContent = p;
-//         filtro.appendChild(opcion);
-//       });
-
-//       filtro.addEventListener('change', () => {
-//         console.log(`🔍 Filtrando por país: ${filtro.value}`);
-//         marcadores.forEach(m => mapa.removeLayer(m));
-//         marcadores = [];
-//         const seleccion = filtro.value;
-//         const filtrados = seleccion ? datos.filter(d => d.Pais === seleccion) : datos;
-//         filtrados.forEach(agregarMarcador);
-//       });
-
-//       datos.forEach(agregarMarcador);
-//     } catch (e) {
-//       console.error('❌ Error al obtener datos:', e);
-//     }
-//   };
-
-//   intentarInicializar();
-// });
-
-
-document.addEventListener('DOMContentLoaded', () => {
-  intentarInicializar();
-});
-
-function intentarInicializar() {
-  const contenedor = document.getElementById('map');
-  const filtro = document.getElementById('filtro-pais');
-
-  if (contenedor && filtro) {
-    console.log('✅ Contenedor y filtro encontrados. Iniciando mapa...');
-    inicializarMapa();
-    cargarDatosYMarcadores(); // asegurate de que esta función exista
+// Esperar a que exista el contenedor del mapa
+function esperarElemento(selector, callback, intentos = 0) {
+  const elemento = document.querySelector(selector);
+  if (elemento) {
+    console.log(`✅ Elemento ${selector} encontrado. Iniciando...`);
+    callback();
+  } else if (intentos < 50) {
+    console.log(`⏳ Esperando que aparezca ${selector}... intento ${intentos}`);
+    setTimeout(() => esperarElemento(selector, callback, intentos + 1), 200);
   } else {
-    console.log('⏳ Esperando a que el contenedor y el filtro existan...');
-    setTimeout(intentarInicializar, 200);
+    console.error(`❌ No se encontró ${selector} después de varios intentos.`);
   }
 }
+
+window.addEventListener('load', () => {
+  esperarElemento('#map', inicializarApp);
+});
