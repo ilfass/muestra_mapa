@@ -1,8 +1,17 @@
 
-window.onload = async () => {
-  inicializarMapa();
-  console.log("Inicializando mapa...");
+document.addEventListener('DOMContentLoaded', async () => {
+  // Esperar a que el contenedor exista
+  const contenedor = document.querySelector('.mapa-convenios');
+  if (!contenedor) {
+    console.error('No se encontró el contenedor del mapa.');
+    return;
+  }
+
+  inicializarMapa(); // Esta función asume que el contenedor ya está
+
   const datos = await obtenerDatos();
+  console.log(datos); // opcional
+
   const paisesUnicos = [...new Set(datos.map(d => d.Pais))];
   const filtro = document.getElementById('filtro-pais');
 
@@ -22,4 +31,4 @@ window.onload = async () => {
   });
 
   datos.forEach(agregarMarcador);
-};
+});
