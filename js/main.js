@@ -1,20 +1,28 @@
-document.addEventListener("DOMContentLoaded", async () => {
-  const container = document.getElementById("mapa-v3");
-  if (!container || typeof MapaV3Data === 'undefined') return;
+class MapSystem {
+  constructor(container) {
+      this.container = container;
+      this.modules = {
+          loader: new DataLoader(this),
+          geocoder: new Geocoder(this),
+          map: new MapManager(this),
+          cache: new CacheManager('mapCache')
+      };
+      this.init().catch(console.error);
+  }
 
-  const sheetUrl = MapaV3Data.sheet;
-  const filtro = MapaV3Data.filtro || "País";
+  async init() {
+      try {
+          const rawData = await this.modules.loader.fetch();
+          const geoData = await this.modules.geocoder.process(rawData);
+          await this.modules.map.render(geoData);
+          this.container.querySelector('.mapa-loading').remove();
+      } catch (error) {
+          this.container.innerHTML = `<div class="mapa-error">⚠️ Error: ${error.message}</div>`;
+          throw error;
+      }
+  }
+}
 
-  const rawData = await fetchSheetData(sheetUrl);
-  const geocodedData = await geocodeUniversities(rawData);
-  const uniqueFilters = getUniqueFilterValues(geocodedData, filtro);
-
-  createFilterControl(uniqueFilters, filtro, filteredValue => {
-      const filtered = applyFilter(geocodedData, filtro, filteredValue);
-      renderMap(filtered);
-  });
-
-  renderMap(geocodedData);
+document.querySelectorAll('.mapa-container').forEach(container => {
+  new MapSystem(container);
 });
-
-// 🖐️ Script principal: coordina todo

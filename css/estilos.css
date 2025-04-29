@@ -1,0 +1,55 @@
+:root {
+  --color-base: #2c3e50;
+  --color-bg: #ffffff;
+  --color-text: #333333;
+  --border-radius: 12px;
+  --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+[class*="theme-dark"] {
+  --color-base: #f8f9fa;
+  --color-bg: #2d3439;
+  --color-text: #e9ecef;
+}
+
+.mapa-container {
+  background: var(--color-bg);
+  border-radius: var(--border-radius);
+  box-shadow: var(--box-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.mapa-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-text);
+  font-size: 1.2rem;
+  z-index: 1000;
+}
+
+.leaflet-popup-content {
+  font-family: 'Segoe UI', system-ui;
+  min-width: 250px;
+}
+
+.leaflet-popup-content h3 {
+  color: var(--color-base);
+  margin: 0 0 0.8rem;
+  font-size: 1.1rem;
+  border-bottom: 2px solid var(--color-base);
+  padding-bottom: 0.4rem;
+}
+
+.custom-cluster {
+  background: var(--color-base);
+  color: var(--color-bg);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
