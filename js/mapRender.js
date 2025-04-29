@@ -1,4 +1,3 @@
-// 🗺️ Renderiza el mapa con Leaflet
 let map;
 
 function renderMap(data) {
@@ -22,3 +21,5 @@ function renderMap(data) {
         `);
     });
 }
+
+// 🗺️ Renderiza el mapa con Leaflet

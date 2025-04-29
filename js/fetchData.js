@@ -1,4 +1,4 @@
-// 🌐 Carga datos desde Google Sheets
+
 async function fetchSheetData(sheetUrl) {
     try {
         const response = await fetch(sheetUrl);
@@ -9,3 +9,5 @@ async function fetchSheetData(sheetUrl) {
         return [];
     }
 }
+
+// 🌐 Carga datos desde Google Sheets

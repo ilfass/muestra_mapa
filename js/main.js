@@ -1,4 +1,3 @@
-// 🖐️ Script principal: coordina todo
 document.addEventListener("DOMContentLoaded", async () => {
   const container = document.getElementById("mapa-v3");
   if (!container || typeof MapaV3Data === 'undefined') return;
@@ -17,3 +16,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   renderMap(geocodedData);
 });
+
+// 🖐️ Script principal: coordina todo

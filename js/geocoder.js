@@ -1,4 +1,3 @@
-// 📍 Geocodifica con cache
 async function geocodeUniversities(data) {
     const geocoded = [];
 
@@ -39,3 +38,5 @@ async function geocodeName(name) {
     }
     return null;
 }
+
+// 📍 Geocodifica con cache

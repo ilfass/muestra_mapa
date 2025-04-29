@@ -1,4 +1,3 @@
-// 🎚️ Crea filtros y filtra los datos
 function getUniqueFilterValues(data, key) {
     const values = new Set();
     data.forEach(item => {
@@ -20,3 +19,5 @@ function applyFilter(data, key, value) {
     if (!value) return data;
     return data.filter(item => item[key] === value);
 }
+
+// 🎚️ Crea filtros y filtra los datos

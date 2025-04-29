@@ -1,4 +1,3 @@
-// archivo: mapa-v3.php
 <?php
 /*
 Plugin Name: Mapa dinámico v3
