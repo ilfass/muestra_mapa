@@ -1,10 +1,10 @@
 // 🖐️ Script principal: coordina todo
 document.addEventListener("DOMContentLoaded", async () => {
   const container = document.getElementById("mapa-v3");
-  if (!container) return;
+  if (!container || typeof MapaV3Data === 'undefined') return;
 
-  const sheetUrl = container.dataset.sheet;
-  const filtro = container.dataset.filtro || "País";
+  const sheetUrl = MapaV3Data.sheet;
+  const filtro = MapaV3Data.filtro || "País";
 
   const rawData = await fetchSheetData(sheetUrl);
   const geocodedData = await geocodeUniversities(rawData);

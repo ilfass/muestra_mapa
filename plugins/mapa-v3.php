@@ -12,13 +12,18 @@ function mapa_v3_shortcode($atts) {
         'filtro' => 'País',
     ), $atts);
 
-    // Contenedor con clase para aplicar estilos
-    $output = '<div id="mapa-v3" class="mapa-v3-contenedor" 
-                data-sheet="' . esc_attr($atts['sheet']) . '" 
-                data-filtro="' . esc_attr($atts['filtro']) . '">
-              </div>';
+    // Encola el script principal sólo si se usa el shortcode
+    add_action('wp_footer', function () use ($atts) {
+        wp_enqueue_script('mapa-v3-main');
 
-    return $output;
+        wp_localize_script('mapa-v3-main', 'MapaV3Data', array(
+            'sheet' => esc_url_raw($atts['sheet']),
+            'filtro' => sanitize_text_field($atts['filtro']),
+        ));
+    });
+
+    // Contenedor HTML limpio
+    return '<div id="mapa-v3" class="mapa-v3-contenedor"></div>';
 }
 add_shortcode('mapa_v3', 'mapa_v3_shortcode');
 
