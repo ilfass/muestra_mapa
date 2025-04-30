@@ -10,6 +10,11 @@ class Geocoder {
 
     // 🖐️ Geocodificar una dirección
     async geocode(item) {
+        if (!item || !item.Universidad || !item.País) {
+            console.error('Datos inválidos para geocodificación:', item);
+            throw new Error('Datos inválidos para geocodificación');
+        }
+
         // Construir una query más específica
         const query = `${item.Universidad} university ${item.País}`;
         
@@ -34,6 +39,10 @@ class Geocoder {
                 }
             });
 
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
             const data = await response.json();
 
             if (data && data.length > 0) {
@@ -41,6 +50,11 @@ class Geocoder {
                     lat: parseFloat(data[0].lat),
                     lng: parseFloat(data[0].lon)
                 };
+                
+                // Validar coordenadas
+                if (isNaN(result.lat) || isNaN(result.lng)) {
+                    throw new Error('Coordenadas inválidas');
+                }
                 
                 // Guardar en caché
                 this.cache.set(query, result);
@@ -71,6 +85,10 @@ class Geocoder {
                 }
             });
 
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status}`);
+            }
+
             const data = await response.json();
 
             if (data && data.length > 0) {
@@ -78,6 +96,11 @@ class Geocoder {
                     lat: parseFloat(data[0].lat),
                     lng: parseFloat(data[0].lon)
                 };
+
+                // Validar coordenadas
+                if (isNaN(result.lat) || isNaN(result.lng)) {
+                    throw new Error('Coordenadas inválidas');
+                }
                 
                 // Guardar en caché
                 this.cache.set(`${item.Universidad}, ${item.País}`, result);
@@ -94,6 +117,11 @@ class Geocoder {
 
     // 🖐️ Geocodificar múltiples elementos
     async batchGeocode(items) {
+        if (!Array.isArray(items)) {
+            console.error('Se esperaba un array de items:', items);
+            throw new Error('Formato de datos inválido para geocodificación por lotes');
+        }
+
         const results = [];
         for (const item of items) {
             try {
@@ -105,9 +133,9 @@ class Geocoder {
                 // Esperar 1 segundo entre solicitudes para respetar límites de API
                 await new Promise(resolve => setTimeout(resolve, 1000));
             } catch (error) {
-                console.error(`Error geocodificando "${item.Universidad}":`, error);
+                console.error(`Error geocodificando "${item?.Universidad}":`, error);
                 results.push({ 
-                    query: item.Universidad,
+                    query: item?.Universidad || 'Desconocido',
                     error: true 
                 });
             }
