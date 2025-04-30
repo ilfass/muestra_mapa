@@ -1,28 +1,59 @@
+/**
+ * 🖐️ Archivo principal que inicializa el sistema del mapa
+ */
 class MapSystem {
-  constructor(container) {
-      this.container = container;
-      this.modules = {
-          loader: new DataLoader(this),
-          geocoder: new Geocoder(this),
-          map: new MapManager(this),
-          cache: new CacheManager('mapCache')
-      };
-      this.init().catch(console.error);
-  }
+    constructor() {
+        this.mapManager = window.mapManager;
+        this.dataLoader = window.dataLoader;
+    }
 
-  async init() {
-      try {
-          const rawData = await this.modules.loader.fetch();
-          const geoData = await this.modules.geocoder.process(rawData);
-          await this.modules.map.render(geoData);
-          this.container.querySelector('.mapa-loading').remove();
-      } catch (error) {
-          this.container.innerHTML = `<div class="mapa-error">⚠️ Error: ${error.message}</div>`;
-          throw error;
-      }
-  }
+    // 🖐️ Inicializar el sistema
+    async init() {
+        try {
+            // Obtener configuración del WordPress
+            const { sheetUrl, filtroDefault } = window.mapaConfig || {};
+            
+            if (!sheetUrl) {
+                throw new Error('URL del Google Sheet no especificada');
+            }
+
+            // Inicializar mapa
+            this.mapManager.init();
+
+            // Cargar datos
+            const data = await this.dataLoader.loadData(sheetUrl);
+            
+            // Actualizar marcadores
+            this.mapManager.updateMarkers(data);
+
+            // Generar filtros
+            this.mapManager.generateFilters(filtroDefault || 'País');
+
+            // Inicializar búsqueda
+            this.mapManager.initSearch();
+
+        } catch (error) {
+            console.error('Error inicializando el sistema:', error);
+            this.showError(error.message);
+        }
+    }
+
+    // 🖐️ Mostrar error
+    showError(message) {
+        const container = document.getElementById('mapa-v3');
+        if (container) {
+            container.innerHTML = `
+                <div class="mapa-error">
+                    <p>❌ Error: ${message}</p>
+                    <p>Por favor, verifica la configuración del mapa.</p>
+                </div>
+            `;
+        }
+    }
 }
 
-document.querySelectorAll('.mapa-container').forEach(container => {
-  new MapSystem(container);
+// Inicializar cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', () => {
+    const system = new MapSystem();
+    system.init();
 });
