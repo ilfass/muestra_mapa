@@ -3,7 +3,7 @@
  * Plugin Name: Mapa Dinámico v3
  * Description: Muestra un mapa interactivo con datos de universidades desde Google Sheets
  * Version: 1.0.0
- * Author: Tu Nombre
+ * Author: Fabián Ariel de Haro
  */
 
 if (!defined('ABSPATH')) exit;
