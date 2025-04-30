@@ -13,11 +13,97 @@
 }
 
 .mapa-container {
-  background: var(--color-bg);
-  border-radius: var(--border-radius);
-  box-shadow: var(--box-shadow);
-  position: relative;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin: 20px 0;
+  padding: 20px;
+}
+
+.mapa {
+  height: 600px;
+  width: 100%;
+  border-radius: 8px;
   overflow: hidden;
+}
+
+.filtros-container {
+  margin-bottom: 15px;
+}
+
+.filtros-container select {
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  width: 200px;
+}
+
+.busqueda-container {
+  margin-bottom: 15px;
+}
+
+.busqueda-container input {
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.custom-marker {
+  background: none;
+  border: none;
+}
+
+.custom-marker i {
+  color: #2b6cb0;
+  font-size: 24px;
+  text-shadow: 2px 2px 3px rgba(0,0,0,0.2);
+}
+
+.custom-popup {
+  padding: 10px;
+}
+
+.custom-popup h3 {
+  margin: 0 0 10px 0;
+  color: #2b6cb0;
+  font-size: 16px;
+}
+
+.custom-popup p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.custom-popup a {
+  color: #2b6cb0;
+  text-decoration: none;
+}
+
+.custom-popup a:hover {
+  text-decoration: underline;
+}
+
+.mapa-error {
+  padding: 20px;
+  background: #fee2e2;
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  color: #dc2626;
+  text-align: center;
+}
+
+.marker-cluster {
+  background-color: rgba(43, 108, 176, 0.6);
+}
+
+.marker-cluster div {
+  background-color: rgba(43, 108, 176, 0.8);
+  color: #fff;
+  font-weight: bold;
 }
 
 .mapa-loading {

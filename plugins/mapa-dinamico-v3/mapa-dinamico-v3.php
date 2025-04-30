@@ -29,6 +29,13 @@ class MapaDinamicoV3 {
         wp_enqueue_style('markercluster-default-css', 'https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css');
         wp_enqueue_script('markercluster-js', 'https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js', array('leaflet-js'), null, true);
 
+        // 🖐️ Cargamos Locate Control
+        wp_enqueue_style('leaflet-locate-css', 'https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.css');
+        wp_enqueue_script('leaflet-locate-js', 'https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.js', array('leaflet-js'), null, true);
+
+        // 🖐️ Cargamos Font Awesome para los iconos
+        wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
+
         // 🖐️ Cargamos nuestros archivos desde GitHub Pages
         wp_enqueue_style('mapa-v3-css', 'https://ilfass.github.io/muestra_mapa/css/estilos.css');
         
@@ -45,7 +52,7 @@ class MapaDinamicoV3 {
             wp_enqueue_script(
                 "mapa-v3-$handle",
                 "https://ilfass.github.io/muestra_mapa/js/$script",
-                array('leaflet-js', 'markercluster-js'),
+                array('leaflet-js', 'markercluster-js', 'leaflet-locate-js'),
                 null,
                 true
             );
