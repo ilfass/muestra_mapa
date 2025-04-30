@@ -17,28 +17,60 @@ class DataLoader {
             this.isLoading = true;
             this.showLoading();
 
+            console.log('🔍 Intentando cargar datos desde:', sheetUrl);
+
             const response = await fetch(sheetUrl);
             const data = await response.json();
             
-            if (!data || !Array.isArray(data)) {
-                throw new Error('Formato de datos inválido');
+            console.log('📊 Datos recibidos del sheet:', data);
+
+            if (!data) {
+                throw new Error('No se recibieron datos del sheet');
+            }
+
+            // Si los datos vienen en un objeto con una propiedad específica
+            const rawData = Array.isArray(data) ? data : data.items || data.data || data.values || Object.values(data);
+
+            console.log('🔄 Datos procesados:', rawData);
+
+            if (!Array.isArray(rawData)) {
+                throw new Error('Los datos no están en un formato válido');
             }
 
             // Validar y limpiar datos
-            const validData = data.filter(item => {
-                return item && 
-                       typeof item === 'object' && 
-                       item.Universidad && 
-                       typeof item.Universidad === 'string' &&
-                       item.País &&
-                       typeof item.País === 'string';
+            const validData = rawData.filter(item => {
+                // Verificar si el item es válido
+                if (!item || typeof item !== 'object') {
+                    console.log('❌ Item inválido:', item);
+                    return false;
+                }
+
+                // Buscar las propiedades necesarias (pueden estar en diferentes casos)
+                const universidad = item.Universidad || item.universidad || item.UNIVERSIDAD;
+                const pais = item.País || item.pais || item.PAIS || item.PAÍS;
+
+                const isValid = universidad && typeof universidad === 'string' &&
+                              pais && typeof pais === 'string';
+
+                if (!isValid) {
+                    console.log('❌ Item con formato incorrecto:', item);
+                }
+
+                // Normalizar el formato de los datos
+                if (isValid) {
+                    item.Universidad = universidad;
+                    item.País = pais;
+                }
+
+                return isValid;
             });
 
-            if (validData.length === 0) {
-                throw new Error('No se encontraron datos válidos en el sheet');
-            }
+            console.log('✅ Datos válidos encontrados:', validData.length);
+            console.log('📝 Muestra de datos válidos:', validData.slice(0, 2));
 
-            console.log('Datos válidos:', validData);
+            if (validData.length === 0) {
+                throw new Error('No se encontraron datos válidos en el sheet. Verifica el formato de los datos.');
+            }
 
             // Geocodificar las ubicaciones
             const geocoded = await this.geocoder.batchGeocode(validData);
@@ -56,7 +88,7 @@ class DataLoader {
             return this.data;
 
         } catch (error) {
-            console.error('Error cargando datos:', error);
+            console.error('❌ Error cargando datos:', error);
             this.hideLoading();
             throw error;
         } finally {
@@ -86,23 +118,32 @@ class DataLoader {
     // 🖐️ Obtener valores únicos para filtros
     getUniqueValues(field) {
         if (!this.data) return [];
-        return [...new Set(this.data.map(item => item[field]))].filter(Boolean).sort();
+        const normalizedField = field.toLowerCase();
+        return [...new Set(this.data.map(item => {
+            // Buscar el campo en diferentes formatos
+            return item[field] || item[field.toLowerCase()] || item[field.toUpperCase()];
+        }))].filter(Boolean).sort();
     }
 
     // 🖐️ Filtrar datos
     filterData(field, value) {
         if (!this.data) return [];
-        return this.data.filter(item => item[field] === value);
+        const normalizedField = field.toLowerCase();
+        return this.data.filter(item => {
+            const itemValue = item[field] || item[field.toLowerCase()] || item[field.toUpperCase()];
+            return itemValue === value;
+        });
     }
 
     // 🖐️ Buscar universidades
     searchUniversities(query) {
         if (!this.data || !query) return [];
         const normalizedQuery = query.toLowerCase().trim();
-        return this.data.filter(item => 
-            item.Universidad.toLowerCase().includes(normalizedQuery) ||
-            item.País.toLowerCase().includes(normalizedQuery)
-        );
+        return this.data.filter(item => {
+            const universidad = (item.Universidad || item.universidad || item.UNIVERSIDAD || '').toLowerCase();
+            const pais = (item.País || item.pais || item.PAIS || item.PAÍS || '').toLowerCase();
+            return universidad.includes(normalizedQuery) || pais.includes(normalizedQuery);
+        });
     }
 }
 
