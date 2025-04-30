@@ -54,16 +54,25 @@ class MapManager {
             })
         });
 
-        // Crear popup personalizado
+        // Obtener las columnas configuradas
+        const columnas = window.mapaConfig?.columnas || {};
+        
+        // Crear popup personalizado con todos los campos disponibles
         const popupContent = `
             <div class="custom-popup">
-                <h3>${item.Universidad}</h3>
-                <p><strong>País:</strong> ${item.País}</p>
-                ${item.nombreCOIL ? `<p><strong>Nombre COIL:</strong> ${item.nombreCOIL}</p>` : ''}
-                ${item.facultad ? `<p><strong>Facultad:</strong> ${item.facultad}</p>` : ''}
-                ${item.año ? `<p><strong>Año:</strong> ${item.año}</p>` : ''}
-                ${item.Región ? `<p><strong>Región:</strong> ${item.Región}</p>` : ''}
-                ${item.Website ? `<p><a href="${item.Website}" target="_blank">Sitio web</a></p>` : ''}
+                <h3>${item[columnas.universidad] || 'Universidad sin nombre'}</h3>
+                ${Object.entries(item).map(([key, value]) => {
+                    // Excluir coordinates y campos vacíos
+                    if (key !== 'coordinates' && value && typeof value === 'string' && value.trim() !== '') {
+                        // Limpiar el valor de saltos de línea extras
+                        const cleanValue = value.replace(/\\n+/g, ' ').trim();
+                        // No mostrar el campo universidad aquí ya que está en el título
+                        if (key !== columnas.universidad) {
+                            return `<p><strong>${key}:</strong> ${cleanValue}</p>`;
+                        }
+                    }
+                    return '';
+                }).join('')}
             </div>
         `;
 
