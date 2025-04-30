@@ -7,6 +7,14 @@ class DataLoader {
         this.data = null;
         this.geocoder = window.geocoder;
         this.isLoading = false;
+        // Definir las columnas clave que siempre vamos a usar
+        this.COLUMNAS = {
+            universidad: 'Universidad contraparte',
+            pais: 'País',
+            nombreCOIL: 'Nombre COIL',
+            facultad: 'Facultad/Dependencia UNICEN',
+            año: 'Año'
+        };
     }
 
     // 🖐️ Cargar datos desde Google Sheets
@@ -38,32 +46,39 @@ class DataLoader {
             }
 
             // Validar y limpiar datos
-            const validData = rawData.filter(item => {
+            const validData = rawData.map(item => {
                 // Verificar si el item es válido
                 if (!item || typeof item !== 'object') {
                     console.log('❌ Item inválido:', item);
-                    return false;
+                    return null;
                 }
 
-                // Buscar las propiedades necesarias (pueden estar en diferentes casos)
-                const universidad = item.Universidad || item.universidad || item.UNIVERSIDAD;
-                const pais = item.País || item.pais || item.PAIS || item.PAÍS;
-
-                const isValid = universidad && typeof universidad === 'string' &&
-                              pais && typeof pais === 'string';
-
-                if (!isValid) {
-                    console.log('❌ Item con formato incorrecto:', item);
+                // Extraer y limpiar el nombre de la universidad
+                const universidad = item[this.COLUMNAS.universidad];
+                if (!universidad || typeof universidad !== 'string') {
+                    console.log('❌ Universidad inválida:', item);
+                    return null;
                 }
 
-                // Normalizar el formato de los datos
-                if (isValid) {
-                    item.Universidad = universidad;
-                    item.País = pais;
+                // Limpiar el nombre de la universidad (eliminar saltos de línea extras)
+                const universidadLimpia = universidad.split('\n')[0].trim();
+
+                // Extraer y validar el país
+                const pais = item[this.COLUMNAS.pais];
+                if (!pais || typeof pais !== 'string') {
+                    console.log('❌ País inválido:', item);
+                    return null;
                 }
 
-                return isValid;
-            });
+                // Crear objeto normalizado
+                return {
+                    Universidad: universidadLimpia,
+                    País: pais,
+                    nombreCOIL: item[this.COLUMNAS.nombreCOIL] || '',
+                    facultad: item[this.COLUMNAS.facultad] || '',
+                    año: item[this.COLUMNAS.año] || ''
+                };
+            }).filter(Boolean); // Eliminar items nulos
 
             console.log('✅ Datos válidos encontrados:', validData.length);
             console.log('📝 Muestra de datos válidos:', validData.slice(0, 2));
@@ -118,19 +133,23 @@ class DataLoader {
     // 🖐️ Obtener valores únicos para filtros
     getUniqueValues(field) {
         if (!this.data) return [];
-        const normalizedField = field.toLowerCase();
-        return [...new Set(this.data.map(item => {
-            // Buscar el campo en diferentes formatos
-            return item[field] || item[field.toLowerCase()] || item[field.toUpperCase()];
-        }))].filter(Boolean).sort();
+        // Mapear el nombre del campo del shortcode al nombre real de la columna
+        const columnaReal = this.COLUMNAS[field.toLowerCase()] || field;
+        const valores = this.data.map(item => {
+            // Intentar obtener el valor usando el nombre original o el normalizado
+            return item[columnaReal] || item[field];
+        });
+        return [...new Set(valores)].filter(Boolean).sort();
     }
 
     // 🖐️ Filtrar datos
     filterData(field, value) {
         if (!this.data) return [];
-        const normalizedField = field.toLowerCase();
+        // Mapear el nombre del campo del shortcode al nombre real de la columna
+        const columnaReal = this.COLUMNAS[field.toLowerCase()] || field;
         return this.data.filter(item => {
-            const itemValue = item[field] || item[field.toLowerCase()] || item[field.toUpperCase()];
+            // Intentar obtener el valor usando el nombre original o el normalizado
+            const itemValue = item[columnaReal] || item[field];
             return itemValue === value;
         });
     }
@@ -140,9 +159,12 @@ class DataLoader {
         if (!this.data || !query) return [];
         const normalizedQuery = query.toLowerCase().trim();
         return this.data.filter(item => {
-            const universidad = (item.Universidad || item.universidad || item.UNIVERSIDAD || '').toLowerCase();
-            const pais = (item.País || item.pais || item.PAIS || item.PAÍS || '').toLowerCase();
-            return universidad.includes(normalizedQuery) || pais.includes(normalizedQuery);
+            const universidad = item.Universidad.toLowerCase();
+            const pais = item.País.toLowerCase();
+            const nombreCOIL = (item.nombreCOIL || '').toLowerCase();
+            return universidad.includes(normalizedQuery) || 
+                   pais.includes(normalizedQuery) ||
+                   nombreCOIL.includes(normalizedQuery);
         });
     }
 }

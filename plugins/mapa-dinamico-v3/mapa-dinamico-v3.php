@@ -63,7 +63,12 @@ class MapaDinamicoV3 {
         // Procesar atributos del shortcode
         $atts = shortcode_atts(array(
             'sheet' => '',
-            'filtro' => 'País'
+            'filtro' => 'País',
+            'col_universidad' => 'Universidad contraparte', // Columna para el nombre de la universidad
+            'col_pais' => 'País',                         // Columna para el país
+            'col_nombre' => 'Nombre COIL',                // Columna para nombre/título adicional
+            'col_facultad' => 'Facultad/Dependencia UNICEN', // Columna para facultad
+            'col_año' => 'Año'                            // Columna para el año
         ), $atts);
 
         // Validar URL del sheet
@@ -74,14 +79,21 @@ class MapaDinamicoV3 {
         // 🖐️ Pasar datos al JavaScript
         wp_localize_script('mapa-v3-main', 'mapaConfig', array(
             'sheetUrl' => $atts['sheet'],
-            'filtroDefault' => $atts['filtro']
+            'filtroDefault' => $atts['filtro'],
+            'columnas' => array(
+                'universidad' => $atts['col_universidad'],
+                'pais' => $atts['col_pais'],
+                'nombreCOIL' => $atts['col_nombre'],
+                'facultad' => $atts['col_facultad'],
+                'año' => $atts['col_año']
+            )
         ));
 
         // Contenedor del mapa
         return '<div class="mapa-container">
                     <div id="mapa-filtros" class="filtros-container"></div>
                     <div id="mapa-busqueda" class="busqueda-container">
-                        <input type="text" id="buscar-universidad" placeholder="Buscar universidad...">
+                        <input type="text" id="buscar-universidad" placeholder="Buscar...">
                     </div>
                     <div id="mapa-v3" class="mapa"></div>
                 </div>';
