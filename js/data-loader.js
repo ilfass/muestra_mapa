@@ -37,6 +37,9 @@ class DataLoader {
             const rawData = Array.isArray(data) ? data : data.items || data.data || data.values || Object.values(data);
 
             console.log('🔄 Datos procesados:', rawData);
+            console.log('🔍 Ejemplo de estructura de un item:', rawData[0]);
+            console.log('🎯 Buscando columna:', this.columnaUniversidad);
+            console.log('📋 Columnas disponibles:', rawData[0] ? Object.keys(rawData[0]) : 'No hay datos');
 
             if (!Array.isArray(rawData)) {
                 throw new Error('Los datos no están en un formato válido');
@@ -55,13 +58,14 @@ class DataLoader {
 
                 // Extraer y limpiar el nombre de la universidad
                 const universidad = item[this.columnaUniversidad];
-                if (!universidad || typeof universidad !== 'string') {
-                    console.log('❌ Universidad inválida:', item);
+                if (!universidad) {
+                    console.log('❌ No se encontró la columna universidad:', this.columnaUniversidad);
+                    console.log('📋 Campos disponibles:', Object.keys(item));
                     return null;
                 }
 
                 // Limpiar el nombre de la universidad (eliminar saltos de línea extras)
-                cleanedItem[this.columnaUniversidad] = universidad.split('\n')[0].trim();
+                cleanedItem[this.columnaUniversidad] = String(universidad).split('\n')[0].trim();
 
                 return cleanedItem;
             }).filter(Boolean); // Eliminar items nulos
@@ -70,7 +74,7 @@ class DataLoader {
             console.log('📝 Muestra de datos válidos:', validData.slice(0, 2));
 
             if (validData.length === 0) {
-                throw new Error('No se encontraron datos válidos en el sheet. Verifica el formato de los datos.');
+                throw new Error(`No se encontraron datos válidos en el sheet. Verifica que la columna '${this.columnaUniversidad}' exista y tenga datos.`);
             }
 
             // Geocodificar las ubicaciones
