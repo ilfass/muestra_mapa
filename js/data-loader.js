@@ -7,8 +7,8 @@ class DataLoader {
         this.data = null;
         this.geocoder = window.geocoder;
         this.isLoading = false;
-        // Definir las columnas clave que siempre vamos a usar
-        this.COLUMNAS = {
+        // Las columnas se obtendrán de la configuración
+        this.COLUMNAS = window.mapaConfig?.columnas || {
             universidad: 'Universidad contraparte',
             pais: 'País',
             nombreCOIL: 'Nombre COIL',
@@ -25,7 +25,11 @@ class DataLoader {
             this.isLoading = true;
             this.showLoading();
 
+            // Actualizar columnas por si han cambiado
+            this.COLUMNAS = window.mapaConfig?.columnas || this.COLUMNAS;
+
             console.log('🔍 Intentando cargar datos desde:', sheetUrl);
+            console.log('📊 Usando configuración de columnas:', this.COLUMNAS);
 
             const response = await fetch(sheetUrl);
             const data = await response.json();
@@ -53,6 +57,9 @@ class DataLoader {
                     return null;
                 }
 
+                // Mantener todos los campos originales
+                const cleanedItem = { ...item };
+
                 // Extraer y limpiar el nombre de la universidad
                 const universidad = item[this.COLUMNAS.universidad];
                 if (!universidad || typeof universidad !== 'string') {
@@ -61,23 +68,9 @@ class DataLoader {
                 }
 
                 // Limpiar el nombre de la universidad (eliminar saltos de línea extras)
-                const universidadLimpia = universidad.split('\n')[0].trim();
+                cleanedItem[this.COLUMNAS.universidad] = universidad.split('\n')[0].trim();
 
-                // Extraer y validar el país
-                const pais = item[this.COLUMNAS.pais];
-                if (!pais || typeof pais !== 'string') {
-                    console.log('❌ País inválido:', item);
-                    return null;
-                }
-
-                // Crear objeto normalizado
-                return {
-                    Universidad: universidadLimpia,
-                    País: pais,
-                    nombreCOIL: item[this.COLUMNAS.nombreCOIL] || '',
-                    facultad: item[this.COLUMNAS.facultad] || '',
-                    año: item[this.COLUMNAS.año] || ''
-                };
+                return cleanedItem;
             }).filter(Boolean); // Eliminar items nulos
 
             console.log('✅ Datos válidos encontrados:', validData.length);
@@ -159,12 +152,11 @@ class DataLoader {
         if (!this.data || !query) return [];
         const normalizedQuery = query.toLowerCase().trim();
         return this.data.filter(item => {
-            const universidad = item.Universidad.toLowerCase();
-            const pais = item.País.toLowerCase();
-            const nombreCOIL = (item.nombreCOIL || '').toLowerCase();
-            return universidad.includes(normalizedQuery) || 
-                   pais.includes(normalizedQuery) ||
-                   nombreCOIL.includes(normalizedQuery);
+            // Buscar en todos los campos de texto
+            return Object.entries(item).some(([key, value]) => {
+                return typeof value === 'string' && 
+                       value.toLowerCase().includes(normalizedQuery);
+            });
         });
     }
 }
