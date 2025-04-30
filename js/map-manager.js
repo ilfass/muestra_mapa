@@ -59,6 +59,9 @@ class MapManager {
             <div class="custom-popup">
                 <h3>${item.Universidad}</h3>
                 <p><strong>País:</strong> ${item.País}</p>
+                ${item.nombreCOIL ? `<p><strong>Nombre COIL:</strong> ${item.nombreCOIL}</p>` : ''}
+                ${item.facultad ? `<p><strong>Facultad:</strong> ${item.facultad}</p>` : ''}
+                ${item.año ? `<p><strong>Año:</strong> ${item.año}</p>` : ''}
                 ${item.Región ? `<p><strong>Región:</strong> ${item.Región}</p>` : ''}
                 ${item.Website ? `<p><a href="${item.Website}" target="_blank">Sitio web</a></p>` : ''}
             </div>
