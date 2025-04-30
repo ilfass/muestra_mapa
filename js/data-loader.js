@@ -7,14 +7,7 @@ class DataLoader {
         this.data = null;
         this.geocoder = window.geocoder;
         this.isLoading = false;
-        // Las columnas se obtendrán de la configuración
-        this.COLUMNAS = window.mapaConfig?.columnas || {
-            universidad: 'Universidad contraparte',
-            pais: 'País',
-            nombreCOIL: 'Nombre COIL',
-            facultad: 'Facultad/Dependencia UNICEN',
-            año: 'Año'
-        };
+        this.columnaUniversidad = window.mapaConfig?.columnaUniversidad || 'Universidad';
     }
 
     // 🖐️ Cargar datos desde Google Sheets
@@ -25,11 +18,11 @@ class DataLoader {
             this.isLoading = true;
             this.showLoading();
 
-            // Actualizar columnas por si han cambiado
-            this.COLUMNAS = window.mapaConfig?.columnas || this.COLUMNAS;
+            // Actualizar nombre de columna por si ha cambiado
+            this.columnaUniversidad = window.mapaConfig?.columnaUniversidad || this.columnaUniversidad;
 
             console.log('🔍 Intentando cargar datos desde:', sheetUrl);
-            console.log('📊 Usando configuración de columnas:', this.COLUMNAS);
+            console.log('📊 Usando columna universidad:', this.columnaUniversidad);
 
             const response = await fetch(sheetUrl);
             const data = await response.json();
@@ -61,14 +54,14 @@ class DataLoader {
                 const cleanedItem = { ...item };
 
                 // Extraer y limpiar el nombre de la universidad
-                const universidad = item[this.COLUMNAS.universidad];
+                const universidad = item[this.columnaUniversidad];
                 if (!universidad || typeof universidad !== 'string') {
                     console.log('❌ Universidad inválida:', item);
                     return null;
                 }
 
                 // Limpiar el nombre de la universidad (eliminar saltos de línea extras)
-                cleanedItem[this.COLUMNAS.universidad] = universidad.split('\n')[0].trim();
+                cleanedItem[this.columnaUniversidad] = universidad.split('\n')[0].trim();
 
                 return cleanedItem;
             }).filter(Boolean); // Eliminar items nulos
@@ -126,25 +119,14 @@ class DataLoader {
     // 🖐️ Obtener valores únicos para filtros
     getUniqueValues(field) {
         if (!this.data) return [];
-        // Mapear el nombre del campo del shortcode al nombre real de la columna
-        const columnaReal = this.COLUMNAS[field.toLowerCase()] || field;
-        const valores = this.data.map(item => {
-            // Intentar obtener el valor usando el nombre original o el normalizado
-            return item[columnaReal] || item[field];
-        });
+        const valores = this.data.map(item => item[field]);
         return [...new Set(valores)].filter(Boolean).sort();
     }
 
     // 🖐️ Filtrar datos
     filterData(field, value) {
         if (!this.data) return [];
-        // Mapear el nombre del campo del shortcode al nombre real de la columna
-        const columnaReal = this.COLUMNAS[field.toLowerCase()] || field;
-        return this.data.filter(item => {
-            // Intentar obtener el valor usando el nombre original o el normalizado
-            const itemValue = item[columnaReal] || item[field];
-            return itemValue === value;
-        });
+        return this.data.filter(item => item[field] === value);
     }
 
     // 🖐️ Buscar universidades
