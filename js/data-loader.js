@@ -7,7 +7,8 @@ class DataLoader {
         this.data = null;
         this.geocoder = window.geocoder;
         this.isLoading = false;
-        this.columnaUniversidad = window.mapaConfig?.columnaUniversidad || 'Universidad';
+        // Columna fija para geocodificación
+        this.COLUMNA_UNIVERSIDAD = 'Universidad contraparte';
     }
 
     // 🖐️ Cargar datos desde Google Sheets
@@ -18,11 +19,7 @@ class DataLoader {
             this.isLoading = true;
             this.showLoading();
 
-            // Actualizar nombre de columna por si ha cambiado
-            this.columnaUniversidad = window.mapaConfig?.columnaUniversidad || this.columnaUniversidad;
-
             console.log('🔍 Intentando cargar datos desde:', sheetUrl);
-            console.log('📊 Usando columna universidad:', this.columnaUniversidad);
 
             const response = await fetch(sheetUrl);
             const data = await response.json();
@@ -38,7 +35,6 @@ class DataLoader {
 
             console.log('🔄 Datos procesados:', rawData);
             console.log('🔍 Ejemplo de estructura de un item:', rawData[0]);
-            console.log('🎯 Buscando columna:', this.columnaUniversidad);
             console.log('📋 Columnas disponibles:', rawData[0] ? Object.keys(rawData[0]) : 'No hay datos');
 
             if (!Array.isArray(rawData)) {
@@ -57,15 +53,15 @@ class DataLoader {
                 const cleanedItem = { ...item };
 
                 // Extraer y limpiar el nombre de la universidad
-                const universidad = item[this.columnaUniversidad];
+                const universidad = item[this.COLUMNA_UNIVERSIDAD];
                 if (!universidad) {
-                    console.log('❌ No se encontró la columna universidad:', this.columnaUniversidad);
+                    console.log('❌ No se encontró la columna universidad:', this.COLUMNA_UNIVERSIDAD);
                     console.log('📋 Campos disponibles:', Object.keys(item));
                     return null;
                 }
 
                 // Limpiar el nombre de la universidad (eliminar saltos de línea extras)
-                cleanedItem[this.columnaUniversidad] = String(universidad).split('\n')[0].trim();
+                cleanedItem[this.COLUMNA_UNIVERSIDAD] = String(universidad).split('\n')[0].trim();
 
                 return cleanedItem;
             }).filter(Boolean); // Eliminar items nulos
@@ -74,11 +70,14 @@ class DataLoader {
             console.log('📝 Muestra de datos válidos:', validData.slice(0, 2));
 
             if (validData.length === 0) {
-                throw new Error(`No se encontraron datos válidos en el sheet. Verifica que la columna '${this.columnaUniversidad}' exista y tenga datos.`);
+                throw new Error(`No se encontraron datos válidos en el sheet. Verifica que la columna '${this.COLUMNA_UNIVERSIDAD}' exista y tenga datos.`);
             }
 
-            // Geocodificar las ubicaciones
-            const geocoded = await this.geocoder.batchGeocode(validData);
+            // Geocodificar las ubicaciones usando el nombre de la universidad
+            const geocoded = await this.geocoder.batchGeocode(validData.map(item => ({
+                Universidad: item[this.COLUMNA_UNIVERSIDAD],
+                País: item['País'] || ''  // País es opcional para geocodificación
+            })));
 
             // Combinar datos con coordenadas
             this.data = validData.map((item, index) => ({

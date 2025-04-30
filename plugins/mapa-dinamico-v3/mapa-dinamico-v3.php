@@ -63,8 +63,7 @@ class MapaDinamicoV3 {
         // Procesar atributos del shortcode
         $atts = shortcode_atts(array(
             'sheet' => '',
-            'col_universidad' => 'Universidad', // Nombre de la columna que contiene el nombre de la universidad
-            'filtro' => 'País'                 // Campo por el que se filtrará inicialmente (opcional)
+            'filtro' => 'País'  // Campo por el que se filtrará inicialmente (opcional)
         ), $atts);
 
         // Validar URL del sheet
@@ -75,7 +74,6 @@ class MapaDinamicoV3 {
         // 🖐️ Pasar datos al JavaScript
         wp_localize_script('mapa-v3-main', 'mapaConfig', array(
             'sheetUrl' => $atts['sheet'],
-            'columnaUniversidad' => $atts['col_universidad'],
             'filtroDefault' => $atts['filtro']
         ));
 
