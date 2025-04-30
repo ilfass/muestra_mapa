@@ -9,7 +9,10 @@ class Geocoder {
     }
 
     // 🖐️ Geocodificar una dirección
-    async geocode(query) {
+    async geocode(item) {
+        // Construir una query más específica
+        const query = `${item.Universidad} university ${item.País}`;
+        
         // Verificar caché primero
         if (this.cache.has(query)) {
             return this.cache.get(query);
@@ -19,7 +22,10 @@ class Geocoder {
             const params = new URLSearchParams({
                 q: query,
                 format: 'json',
-                limit: 1
+                limit: 1,
+                addressdetails: 1,
+                type: 'education',  // Priorizar resultados educativos
+                'accept-language': 'es,en'  // Priorizar nombres en español
             });
 
             const response = await fetch(`${this.BASE_URL}?${params}`, {
@@ -41,26 +47,69 @@ class Geocoder {
                 return result;
             }
 
-            throw new Error('No se encontraron resultados');
+            // Si no se encuentra, intentar una búsqueda más general
+            return this.fallbackGeocode(item);
 
         } catch (error) {
             console.error('Error en geocodificación:', error);
+            return this.fallbackGeocode(item);
+        }
+    }
+
+    // 🖐️ Búsqueda alternativa si falla la primera
+    async fallbackGeocode(item) {
+        try {
+            const params = new URLSearchParams({
+                q: `${item.Universidad} ${item.País}`,
+                format: 'json',
+                limit: 1
+            });
+
+            const response = await fetch(`${this.BASE_URL}?${params}`, {
+                headers: {
+                    'User-Agent': 'UniversityMapPlugin/1.0'
+                }
+            });
+
+            const data = await response.json();
+
+            if (data && data.length > 0) {
+                const result = {
+                    lat: parseFloat(data[0].lat),
+                    lng: parseFloat(data[0].lon)
+                };
+                
+                // Guardar en caché
+                this.cache.set(`${item.Universidad}, ${item.País}`, result);
+                return result;
+            }
+
+            throw new Error(`No se encontraron resultados para: ${item.Universidad}`);
+
+        } catch (error) {
+            console.error(`Error en geocodificación fallback para ${item.Universidad}:`, error);
             throw error;
         }
     }
 
-    // 🖐️ Geocodificar múltiples direcciones
-    async batchGeocode(queries) {
-        // Esperar 1 segundo entre cada solicitud para respetar límites de API
+    // 🖐️ Geocodificar múltiples elementos
+    async batchGeocode(items) {
         const results = [];
-        for (const query of queries) {
+        for (const item of items) {
             try {
-                const result = await this.geocode(query);
-                results.push({ query, ...result });
+                const result = await this.geocode(item);
+                results.push({ 
+                    query: item.Universidad,
+                    ...result 
+                });
+                // Esperar 1 segundo entre solicitudes para respetar límites de API
                 await new Promise(resolve => setTimeout(resolve, 1000));
             } catch (error) {
-                console.error(`Error geocodificando "${query}":`, error);
-                results.push({ query, error: true });
+                console.error(`Error geocodificando "${item.Universidad}":`, error);
+                results.push({ 
+                    query: item.Universidad,
+                    error: true 
+                });
             }
         }
         return results;
