@@ -9,6 +9,7 @@ class DataLoader {
         this.isLoading = false;
         // Columna fija para geocodificación
         this.COLUMNA_UNIVERSIDAD = 'Universidad contraparte';
+        this.callbackName = 'jsonpCallback_' + Math.random().toString(36).substr(2, 9);
     }
 
     // 🖐️ Cargar datos desde Google Sheets
@@ -21,75 +22,52 @@ class DataLoader {
 
             console.log('🔍 Intentando cargar datos desde:', sheetUrl);
 
-            const response = await fetch(sheetUrl);
-            const data = await response.json();
-            
-            console.log('📊 Datos recibidos del sheet:', data);
-
-            if (!data) {
-                throw new Error('No se recibieron datos del sheet');
+            // Validar URL
+            if (!sheetUrl) {
+                throw new Error('URL de la hoja no proporcionada');
             }
 
-            // Si los datos vienen en un objeto con una propiedad específica
-            const rawData = Array.isArray(data) ? data : data.items || data.data || data.values || Object.values(data);
+            // Limpiar URL
+            sheetUrl = sheetUrl.trim();
 
-            console.log('🔄 Datos procesados:', rawData);
-            console.log('🔍 Ejemplo de estructura de un item:', rawData[0]);
-            console.log('📋 Columnas disponibles:', rawData[0] ? Object.keys(rawData[0]) : 'No hay datos');
+            // Extraer fileId y hoja
+            const urlObj = new URL(sheetUrl);
+            const fileId = urlObj.searchParams.get('fileId');
+            const hoja = urlObj.searchParams.get('hoja');
 
-            if (!Array.isArray(rawData)) {
-                throw new Error('Los datos no están en un formato válido');
+            if (!fileId) {
+                throw new Error('ID de archivo no encontrado en la URL');
             }
 
-            // Validar y limpiar datos
-            const validData = rawData.map(item => {
-                // Verificar si el item es válido
-                if (!item || typeof item !== 'object') {
-                    console.log('❌ Item inválido:', item);
-                    return null;
-                }
+            // Construir URL con JSONP
+            const scriptUrl = `${sheetUrl}&callback=${this.callbackName}`;
 
-                // Mantener todos los campos originales
-                const cleanedItem = { ...item };
+            // Crear promesa para JSONP
+            return new Promise((resolve, reject) => {
+                // Crear función de callback global
+                window[this.callbackName] = (response) => {
+                    // Limpiar
+                    delete window[this.callbackName];
+                    document.body.removeChild(script);
+                    
+                    if (!response.success) {
+                        reject(new Error(response.error || 'Error desconocido'));
+                        return;
+                    }
+                    
+                    resolve(response.data);
+                };
 
-                // Extraer y limpiar el nombre de la universidad
-                const universidad = item[this.COLUMNA_UNIVERSIDAD];
-                if (!universidad) {
-                    console.log('❌ No se encontró la columna universidad:', this.COLUMNA_UNIVERSIDAD);
-                    console.log('📋 Campos disponibles:', Object.keys(item));
-                    return null;
-                }
-
-                // Limpiar el nombre de la universidad (eliminar saltos de línea extras)
-                cleanedItem[this.COLUMNA_UNIVERSIDAD] = String(universidad).split('\n')[0].trim();
-
-                return cleanedItem;
-            }).filter(Boolean); // Eliminar items nulos
-
-            console.log('✅ Datos válidos encontrados:', validData.length);
-            console.log('📝 Muestra de datos válidos:', validData.slice(0, 2));
-
-            if (validData.length === 0) {
-                throw new Error(`No se encontraron datos válidos en el sheet. Verifica que la columna '${this.COLUMNA_UNIVERSIDAD}' exista y tenga datos.`);
-            }
-
-            // Geocodificar las ubicaciones usando el nombre de la universidad
-            const geocoded = await this.geocoder.batchGeocode(validData.map(item => ({
-                Universidad: item[this.COLUMNA_UNIVERSIDAD],
-                País: item['País'] || ''  // País es opcional para geocodificación
-            })));
-
-            // Combinar datos con coordenadas
-            this.data = validData.map((item, index) => ({
-                ...item,
-                coordinates: geocoded[index].error ? null : {
-                    lat: geocoded[index].lat,
-                    lng: geocoded[index].lng
-                }
-            }));
-
-            this.hideLoading();
-            return this.data;
+                // Crear y agregar script
+                const script = document.createElement('script');
+                script.src = scriptUrl;
+                script.onerror = () => {
+                    delete window[this.callbackName];
+                    document.body.removeChild(script);
+                    reject(new Error('Error cargando el script'));
+                };
+                document.body.appendChild(script);
+            });
 
         } catch (error) {
             console.error('❌ Error cargando datos:', error);

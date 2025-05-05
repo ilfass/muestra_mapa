@@ -10,27 +10,42 @@ const CONFIG = {
 // Función principal que será llamada por la URL web
 function doGet(e) {
   try {
-    // Obtener parámetros
+    // Obtener el ID del archivo y callback
     const fileId = e.parameter.fileId;
-    const sheetName = e.parameter.hoja || CONFIG.DEFAULT_SHEET_NAME;
-
-    if (!fileId) {
-      return ContentService.createTextOutput(JSON.stringify({
-        error: 'Se requiere el parámetro fileId'
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
-
-    // Obtener y procesar datos
-    const data = processSheetData(fileId, sheetName);
+    const callback = e.parameter.callback;
     
-    // Devolver respuesta JSON
-    return ContentService.createTextOutput(JSON.stringify(data))
-      .setMimeType(ContentService.MimeType.JSON);
-
+    // Abrir la hoja
+    const sheet = SpreadsheetApp.openById(fileId).getActiveSheet();
+    
+    // Obtener datos
+    const data = sheet.getDataRange().getValues();
+    
+    // Preparar respuesta
+    const response = {
+      success: true,
+      data: data
+    };
+    
+    // Devolver como JSONP si hay callback, sino como JSON
+    const output = callback ? 
+      `${callback}(${JSON.stringify(response)})` : 
+      JSON.stringify(response);
+      
+    return ContentService.createTextOutput(output)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+      
   } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
-      error: error.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    const errorResponse = {
+      success: false,
+      error: error.message
+    };
+    
+    const output = e.parameter.callback ? 
+      `${e.parameter.callback}(${JSON.stringify(errorResponse)})` : 
+      JSON.stringify(errorResponse);
+      
+    return ContentService.createTextOutput(output)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
 }
 
