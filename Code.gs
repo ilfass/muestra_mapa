@@ -14,8 +14,9 @@ function doGet(e) {
     const fileId = e.parameter.fileId;
     const callback = e.parameter.callback;
     
-    // Abrir la hoja
-    const sheet = SpreadsheetApp.openById(fileId).getActiveSheet();
+    // Abrir la hoja y asegurar acceso público
+    const ss = SpreadsheetApp.openById(fileId);
+    const sheet = ss.getActiveSheet();
     
     // Obtener datos
     const data = sheet.getDataRange().getValues();
