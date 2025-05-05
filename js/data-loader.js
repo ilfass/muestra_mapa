@@ -48,14 +48,60 @@ class DataLoader {
                 window[this.callbackName] = (response) => {
                     // Limpiar
                     delete window[this.callbackName];
-                    document.body.removeChild(script);
+                    if (script && script.parentNode) {
+                        script.parentNode.removeChild(script);
+                    }
                     
                     if (!response.success) {
                         reject(new Error(response.error || 'Error desconocido'));
                         return;
                     }
                     
-                    resolve(response.data);
+                    // Procesar datos
+                    const rawData = response.data;
+                    if (!Array.isArray(rawData) || rawData.length === 0) {
+                        reject(new Error('No se recibieron datos válidos del sheet'));
+                        return;
+                    }
+
+                    // Validar y limpiar datos
+                    const validData = rawData.map(item => {
+                        if (!item || typeof item !== 'object') {
+                            return null;
+                        }
+
+                        const cleanedItem = { ...item };
+                        const universidad = item[this.COLUMNA_UNIVERSIDAD];
+                        if (!universidad) {
+                            return null;
+                        }
+
+                        cleanedItem[this.COLUMNA_UNIVERSIDAD] = String(universidad).split('\n')[0].trim();
+                        return cleanedItem;
+                    }).filter(Boolean);
+
+                    if (validData.length === 0) {
+                        reject(new Error(`No se encontraron datos válidos en el sheet. Verifica que la columna '${this.COLUMNA_UNIVERSIDAD}' exista y tenga datos.`));
+                        return;
+                    }
+
+                    // Geocodificar las ubicaciones
+                    this.geocoder.batchGeocode(validData.map(item => ({
+                        Universidad: item[this.COLUMNA_UNIVERSIDAD],
+                        País: item['País'] || ''
+                    }))).then(geocoded => {
+                        // Combinar datos con coordenadas
+                        this.data = validData.map((item, index) => ({
+                            ...item,
+                            coordinates: geocoded[index].error ? null : {
+                                lat: geocoded[index].lat,
+                                lng: geocoded[index].lng
+                            }
+                        }));
+                        resolve(this.data);
+                    }).catch(error => {
+                        reject(new Error('Error en la geocodificación: ' + error.message));
+                    });
                 };
 
                 // Crear y agregar script
@@ -63,8 +109,10 @@ class DataLoader {
                 script.src = scriptUrl;
                 script.onerror = () => {
                     delete window[this.callbackName];
-                    document.body.removeChild(script);
-                    reject(new Error('Error cargando el script'));
+                    if (script && script.parentNode) {
+                        script.parentNode.removeChild(script);
+                    }
+                    reject(new Error('Error cargando el script. Verifica que la URL sea correcta y el sheet sea accesible públicamente.'));
                 };
                 document.body.appendChild(script);
             });
