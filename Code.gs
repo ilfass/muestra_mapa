@@ -10,9 +10,19 @@ const CONFIG = {
 // Función principal que será llamada por la URL web
 function doGet(e) {
   try {
+    // Verificar que e existe y tiene parámetros
+    if (!e || !e.parameter) {
+      throw new Error('No se recibieron parámetros en la solicitud');
+    }
+
     // Obtener el ID del archivo y callback
     const fileId = e.parameter.fileId;
     const callback = e.parameter.callback;
+    
+    // Verificar que se proporcionó el fileId
+    if (!fileId) {
+      throw new Error('Se requiere el parámetro fileId');
+    }
     
     // Abrir la hoja y asegurar acceso público
     const ss = SpreadsheetApp.openById(fileId);
@@ -38,10 +48,10 @@ function doGet(e) {
   } catch (error) {
     const errorResponse = {
       success: false,
-      error: error.message
+      error: error.message || 'Error desconocido'
     };
     
-    const output = e.parameter.callback ? 
+    const output = e && e.parameter && e.parameter.callback ? 
       `${e.parameter.callback}(${JSON.stringify(errorResponse)})` : 
       JSON.stringify(errorResponse);
       
