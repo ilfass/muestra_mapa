@@ -1,12 +1,12 @@
 /**
- * Versión: 1.0.6
+ * Versión: 1.0.7
  * Última actualización: 2024-03-19
  * Descripción: Script para acceder a datos de Google Sheets de forma genérica
  */
 
 // Configuración global
 const CONFIG = {
-  VERSION: "1.0.6",
+  VERSION: "1.0.7",
   DEFAULT_SHEET_ID: "15cC7TpXzNfRWoyn8yn_pkHN1-A2NeXAsEA9HDy37MFU",
   DEFAULT_SHEET_NAME: "Sheet1"
 };
@@ -61,11 +61,10 @@ function doGet(e) {
     }
 
     // Configurar headers CORS
-    return output.setHeaders({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET",
-      "Access-Control-Allow-Headers": "Content-Type"
-    });
+    output.setHeader("Access-Control-Allow-Origin", "*");
+    output.setHeader("Access-Control-Allow-Methods", "GET");
+    output.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return output;
 
   } catch (error) {
     const errorResponse = {
@@ -75,12 +74,13 @@ function doGet(e) {
       error: error.message
     };
 
-    return ContentService.createTextOutput(JSON.stringify(errorResponse))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders({
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET",
-        "Access-Control-Allow-Headers": "Content-Type"
-      });
+    const output = ContentService.createTextOutput(JSON.stringify(errorResponse))
+      .setMimeType(ContentService.MimeType.JSON);
+    
+    // Configurar headers CORS
+    output.setHeader("Access-Control-Allow-Origin", "*");
+    output.setHeader("Access-Control-Allow-Methods", "GET");
+    output.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    return output;
   }
 }
