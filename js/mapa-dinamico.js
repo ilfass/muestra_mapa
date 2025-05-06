@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.0.2
+ * Mapa Dinámico - JS v1.0.3
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -15,7 +15,7 @@
 if (typeof MapaDinamico === 'undefined') {
     console.error('La variable global MapaDinamico no está definida');
     MapaDinamico = {
-        geocodingDelay: 500, // Reducido para mayor velocidad
+        geocodingDelay: 500,
         nominatimUrl: 'https://nominatim.openstreetmap.org/search'
     };
 }
@@ -97,13 +97,53 @@ document.addEventListener("DOMContentLoaded", () => {
                     selectPais.appendChild(option);
                 });
 
+                // Función para procesar una universidad
+                function processUniversity(university, entry) {
+                    if (!university) return;
+                    
+                    // Verificar caché
+                    if (coordsCache[university]) {
+                        addMarker(coordsCache[university], entry, university);
+                        return Promise.resolve();
+                    }
+
+                    // Si no está en caché, geocodificar
+                    return new Promise(resolve => {
+                        fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`)
+                            .then(res => {
+                                if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
+                                return res.json();
+                            })
+                            .then(data => {
+                                if (data.length) {
+                                    const coords = {
+                                        lat: parseFloat(data[0].lat),
+                                        lng: parseFloat(data[0].lon)
+                                    };
+                                    // Guardar en caché
+                                    coordsCache[university] = coords;
+                                    localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
+                                    // Añadir marcador
+                                    addMarker(coords, entry, university);
+                                } else {
+                                    console.warn("No se encontró ubicación para:", university);
+                                }
+                                resolve();
+                            })
+                            .catch(err => {
+                                console.error("Error geocodificando:", university, err);
+                                resolve();
+                            });
+                    });
+                }
+
                 // Función para añadir marcador con popup
-                function addMarker(coords, entry) {
+                function addMarker(coords, entry, university) {
                     const popupContent = `
                         <div class="info">
-                            <h4>${entry["Universidad Contraparte"] || entry["Nombre"] || "Sin nombre"}</h4>
+                            <h4>${university}</h4>
                             ${Object.entries(entry)
-                                .filter(([key, val]) => val && key !== "Universidad Contraparte" && key !== "Nombre")
+                                .filter(([key, val]) => val && key !== "Universidad contraparte" && key !== "Nombre")
                                 .map(([key, val]) => `<strong>${key}:</strong> ${val}`)
                                 .join("<br>")}
                         </div>
@@ -115,7 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     allMarkers.push({
                         marker,
                         entry,
-                        searchText: `${entry["Universidad Contraparte"] || ""} ${entry["Nombre"] || ""} ${entry["País"] || ""}`.toLowerCase()
+                        searchText: `${university} ${entry["País"] || ""}`.toLowerCase()
                     });
                     
                     markers.addLayer(marker);
@@ -142,59 +182,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 selectPais.addEventListener("change", updateMarkers);
                 buscador.addEventListener("input", updateMarkers);
 
-                // Geolocalizar cada entrada con retraso configurable
-                const geocodePromises = rows.map((entry, index) => {
-                    const nombre = entry["Universidad Contraparte"] || entry["Nombre"];
-                    if (!nombre) {
-                        console.warn("Entrada sin nombre:", entry);
-                        return Promise.resolve();
-                    }
-
-                    // Verificar caché
-                    if (coordsCache[nombre]) {
-                        addMarker(coordsCache[nombre], entry);
-                        return Promise.resolve();
-                    }
-
-                    // Si no está en caché, geocodificar con retraso
-                    return new Promise(resolve => {
-                        setTimeout(() => {
-                            fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(nombre)}&format=json&limit=1`)
-                                .then(res => {
-                                    if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-                                    return res.json();
-                                })
-                                .then(data => {
-                                    if (data.length) {
-                                        const coords = {
-                                            lat: parseFloat(data[0].lat),
-                                            lng: parseFloat(data[0].lon)
-                                        };
-                                        // Guardar en caché
-                                        coordsCache[nombre] = coords;
-                                        localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
-                                        // Añadir marcador
-                                        addMarker(coords, entry);
-                                    } else {
-                                        console.warn("No se encontró ubicación para:", nombre);
-                                    }
-                                    resolve();
-                                })
-                                .catch(err => {
-                                    console.error("Error geocodificando:", nombre, err);
-                                    // Reintentar después de un error
-                                    setTimeout(() => {
-                                        delete coordsCache[nombre];
-                                        localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
-                                    }, 5000);
-                                    resolve();
-                                });
-                        }, index * MapaDinamico.geocodingDelay);
-                    });
+                // Procesar cada entrada
+                const processPromises = rows.map((entry, index) => {
+                    const universities = entry["Universidad contraparte"]?.split(/\s*,\s*|\s*y\s*/) || [];
+                    return Promise.all(universities.map((univ, i) => 
+                        new Promise(resolve => 
+                            setTimeout(() => 
+                                processUniversity(univ.trim(), entry).then(resolve),
+                                (index * universities.length + i) * MapaDinamico.geocodingDelay
+                            )
+                        )
+                    ));
                 });
 
                 // Esperar a que todas las geocodificaciones terminen
-                Promise.all(geocodePromises).then(() => {
+                Promise.all(processPromises).then(() => {
                     console.log("Todas las geocodificaciones completadas");
                 });
 
