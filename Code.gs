@@ -1,14 +1,18 @@
 /**
- * Versión: 1.0.7
+ * Versión: 1.0.8
  * Última actualización: 2024-03-19
- * Descripción: Script para acceder a datos de Google Sheets de forma genérica
+ * Descripción: Script para acceder a datos de Google Sheets con geocodificación automática
  */
 
 // Configuración global
 const CONFIG = {
-  VERSION: "1.0.7",
-  DEFAULT_SHEET_ID: "15cC7TpXzNfRWoyn8yn_pkHN1-A2NeXAsEA9HDy37MFU",
-  DEFAULT_SHEET_NAME: "Sheet1"
+  VERSION: "1.0.8",
+  CACHE_DURATION: 21600, // 6 horas en segundos
+  GEOCODING_DELAY: 1000, // 1 segundo entre solicitudes de geocodificación
+  NOMINATIM_URL: 'https://nominatim.openstreetmap.org/search',
+  SHEET_CACHE_KEY: 'SHEET_DATA_',
+  COORDS_CACHE_KEY: 'COORDS_DATA',
+  DEFAULT_SHEET_NAME: 'Sheet1'
 };
 
 /**
@@ -20,33 +24,16 @@ function doGet(e) {
   try {
     // Validar parámetros
     const params = e.parameter || {};
-    const sheetId = params.sheetId || CONFIG.DEFAULT_SHEET_ID;
-    const sheetName = params.sheetName || CONFIG.DEFAULT_SHEET_NAME;
+    const sheetName = params.sheetName || params.sheet || CONFIG.DEFAULT_SHEET_NAME;
     const format = params.format || "json";
     
-    // Obtener hoja y datos
-    const sheet = SpreadsheetApp.openById(sheetId).getSheetByName(sheetName);
-    if (!sheet) {
-      throw new Error("No se pudo acceder a la hoja de cálculo");
-    }
-
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const rows = data.slice(1).map(row => {
-      const obj = {};
-      headers.forEach((header, index) => {
-        obj[header] = row[index];
-      });
-      return obj;
-    });
-
+    // Obtener y procesar datos
+    const data = getProcessedData(sheetName);
+    
     // Preparar respuesta según formato
     let output;
     if (format === "csv") {
-      const csvContent = [
-        headers.join(","),
-        ...data.slice(1).map(row => row.join(","))
-      ].join("\n");
+      const csvContent = convertToCSV(data);
       output = ContentService.createTextOutput(csvContent)
         .setMimeType(ContentService.MimeType.CSV);
     } else {
@@ -54,7 +41,7 @@ function doGet(e) {
         success: true,
         version: CONFIG.VERSION,
         timestamp: new Date().toISOString(),
-        data: rows
+        data: data
       };
       output = ContentService.createTextOutput(JSON.stringify(jsonResponse))
         .setMimeType(ContentService.MimeType.JSON);
@@ -83,4 +70,177 @@ function doGet(e) {
     output.setHeader("Access-Control-Allow-Headers", "Content-Type");
     return output;
   }
+}
+
+/**
+ * Obtiene y procesa los datos con caché
+ * @param {string} sheetName - Nombre de la hoja
+ * @return {Array} Datos procesados
+ */
+function getProcessedData(sheetName) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = CONFIG.SHEET_CACHE_KEY + sheetName;
+  
+  // Intentar obtener datos del caché
+  let data = cache.get(cacheKey);
+  if (data != null) {
+    return JSON.parse(data);
+  }
+  
+  // Si no hay caché, obtener datos frescos
+  data = getSheetData(sheetName);
+  
+  // Procesar coordenadas
+  data = processCoordinates(data);
+  
+  // Guardar en caché
+  cache.put(cacheKey, JSON.stringify(data), CONFIG.CACHE_DURATION);
+  
+  return data;
+}
+
+/**
+ * Obtiene datos de la hoja
+ * @param {string} sheetName - Nombre de la hoja
+ * @return {Array} Datos de la hoja
+ */
+function getSheetData(sheetName) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName(sheetName);
+    
+  if (!sheet) {
+    throw new Error(`Hoja "${sheetName}" no encontrada`);
+  }
+  
+  const range = sheet.getDataRange();
+  const values = range.getValues();
+  const headers = values[0];
+  
+  return values.slice(1)
+    .map(row => {
+      const item = {};
+      headers.forEach((header, index) => {
+        item[header] = row[index];
+      });
+      return item;
+    })
+    .filter(item => {
+      const universidad = item['Universidad'] || item['Universidad contraparte'];
+      return universidad && universidad.toString().trim() !== '';
+    });
+}
+
+/**
+ * Procesa las coordenadas de las universidades
+ * @param {Array} data - Datos a procesar
+ * @return {Array} Datos con coordenadas
+ */
+function processCoordinates(data) {
+  const cache = CacheService.getScriptCache();
+  let coordsCache = cache.get(CONFIG.COORDS_CACHE_KEY);
+  let coordsData = coordsCache ? JSON.parse(coordsCache) : {};
+  
+  data = data.map(item => {
+    const universidad = item['Universidad'] || item['Universidad contraparte'];
+    if (!universidad) return item;
+    
+    // Buscar en caché primero
+    if (coordsData[universidad]) {
+      item.coordinates = coordsData[universidad];
+      return item;
+    }
+    
+    // Si no está en caché, geocodificar
+    const coords = geocodeUniversity(universidad);
+    if (coords) {
+      coordsData[universidad] = coords;
+      item.coordinates = coords;
+    }
+    
+    return item;
+  });
+  
+  // Actualizar caché de coordenadas
+  cache.put(CONFIG.COORDS_CACHE_KEY, JSON.stringify(coordsData), CONFIG.CACHE_DURATION);
+  
+  return data;
+}
+
+/**
+ * Geocodifica una universidad usando Nominatim
+ * @param {string} universidad - Nombre de la universidad
+ * @return {Object|null} Coordenadas o null si no se encuentra
+ */
+function geocodeUniversity(universidad) {
+  try {
+    const query = encodeURIComponent(universidad);
+    const url = `${CONFIG.NOMINATIM_URL}?q=${query}&format=json&limit=1`;
+    
+    Utilities.sleep(CONFIG.GEOCODING_DELAY); // Respetar límites de rate
+    
+    const response = UrlFetchApp.fetch(url);
+    const data = JSON.parse(response.getContentText());
+    
+    if (data && data[0]) {
+      return {
+        lat: parseFloat(data[0].lat),
+        lng: parseFloat(data[0].lon)
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error(`Error geocodificando ${universidad}: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Convierte datos a formato CSV
+ * @param {Array} data - Datos a convertir
+ * @return {string} Datos en formato CSV
+ */
+function convertToCSV(data) {
+  if (data.length === 0) return '';
+  
+  const headers = Object.keys(data[0]);
+  return [
+    headers.join(','),
+    ...data.map(row => headers.map(header => row[header]).join(','))
+  ].join('\n');
+}
+
+/**
+ * Limpia el caché manualmente
+ */
+function clearCache() {
+  const cache = CacheService.getScriptCache();
+  cache.remove(CONFIG.COORDS_CACHE_KEY);
+  
+  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  sheets.forEach(sheet => {
+    cache.remove(CONFIG.SHEET_CACHE_KEY + sheet.getName());
+  });
+}
+
+/**
+ * Actualiza los datos manualmente
+ */
+function updateData() {
+  clearCache();
+  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
+  sheets.forEach(sheet => {
+    getProcessedData(sheet.getName());
+  });
+}
+
+/**
+ * Crea el menú personalizado
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('Mapa Dinámico')
+    .addItem('Actualizar Datos', 'updateData')
+    .addItem('Limpiar Caché', 'clearCache')
+    .addToUi();
 }
