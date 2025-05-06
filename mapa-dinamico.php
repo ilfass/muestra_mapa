@@ -32,7 +32,7 @@ function mapa_dinamico_enqueue_assets() {
         'mapa-dinamico-js',
         'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@main/js/mapa-dinamico.js',
         ['leaflet-js', 'leaflet-markercluster-js'],
-        '1.0.2',
+        '1.0.3',
         true
     );
 
