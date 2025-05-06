@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.0.5
+ * Mapa Dinámico - JS v1.0.6
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -15,8 +15,9 @@
 if (typeof MapaDinamico === 'undefined') {
     console.error('La variable global MapaDinamico no está definida');
     MapaDinamico = {
-        geocodingDelay: 1000, // Aumentado para evitar rate limiting
-        nominatimUrl: 'https://nominatim.openstreetmap.org/search'
+        geocodingDelay: 1500, // Aumentado para evitar rate limiting
+        nominatimUrl: 'https://nominatim.openstreetmap.org/search',
+        maxRetries: 3 // Número máximo de reintentos
     };
 }
 
@@ -34,21 +35,33 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
+    // Mostrar indicador de carga
+    container.innerHTML = '<div class="loading">Cargando mapa...</div>';
+
     // Inicializar mapa con vista mundial
     const map = L.map(container).setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    // Inicializar cluster de marcadores
+    // Inicializar cluster de marcadores con configuración mejorada
     const markers = L.markerClusterGroup({
-        maxClusterRadius: 50,
+        maxClusterRadius: 30, // Reducido para clusters más pequeños
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
         zoomToBoundsOnClick: true,
+        disableClusteringAtZoom: 5, // Desactivar clustering en zoom cercano
+        chunkedLoading: true, // Cargar marcadores en chunks
+        chunkInterval: 200, // Intervalo entre chunks
+        chunkDelay: 50, // Delay entre chunks
         iconCreateFunction: function(cluster) {
+            const count = cluster.getChildCount();
+            let size = 'small';
+            if (count > 100) size = 'large';
+            else if (count > 10) size = 'medium';
+            
             return L.divIcon({
-                html: `<div class="cluster-count">${cluster.getChildCount()}</div>`,
+                html: `<div class="cluster-count ${size}">${count}</div>`,
                 className: 'marker-cluster',
                 iconSize: L.point(40, 40)
             });
@@ -59,6 +72,16 @@ document.addEventListener("DOMContentLoaded", () => {
     // Cache de coordenadas desde localStorage
     const coordsCache = JSON.parse(localStorage.getItem('coordsCache') || '{}');
     let allMarkers = [];
+
+    // Función para limpiar texto
+    function cleanText(text) {
+        if (!text) return '';
+        return text
+            .replace(/\n+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toLowerCase();
+    }
 
     // Cargar datos de la hoja usando el endpoint gviz/tq
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
@@ -75,7 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const rows = json.table.rows.map(row => {
                     const obj = {};
                     row.c.forEach((cell, i) => {
-                        obj[cols[i]] = cell?.v || "";
+                        obj[cols[i]] = cleanText(cell?.v || "");
                     });
                     return obj;
                 });
@@ -97,12 +120,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     selectPais.appendChild(option);
                 });
 
-                // Función para procesar una universidad
-                function processUniversity(university, entry) {
+                // Función para procesar una universidad con reintentos
+                function processUniversity(university, entry, retryCount = 0) {
                     if (!university) return Promise.resolve();
-                    
-                    // Limpiar nombre de universidad
-                    university = university.replace(/\n+/g, ' ').trim();
                     
                     // Verificar caché
                     if (coordsCache[university]) {
@@ -140,7 +160,15 @@ document.addEventListener("DOMContentLoaded", () => {
                             })
                             .catch(err => {
                                 console.error("Error geocodificando:", university, err);
-                                resolve();
+                                if (retryCount < MapaDinamico.maxRetries) {
+                                    // Reintentar con un delay exponencial
+                                    setTimeout(() => {
+                                        processUniversity(university, entry, retryCount + 1)
+                                            .then(resolve);
+                                    }, Math.pow(2, retryCount) * MapaDinamico.geocodingDelay);
+                                } else {
+                                    resolve();
+                                }
                             });
                         }, MapaDinamico.geocodingDelay);
                     });
@@ -173,7 +201,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Función para actualizar marcadores según filtros
                 function updateMarkers() {
                     const paisSeleccionado = selectPais.value;
-                    const busqueda = buscador.value.toLowerCase();
+                    const busqueda = cleanText(buscador.value);
                     
                     markers.clearLayers();
                     
@@ -187,22 +215,50 @@ document.addEventListener("DOMContentLoaded", () => {
                     });
                 }
 
-                // Eventos de cambio en los filtros
+                // Eventos de cambio en los filtros con debounce
+                let searchTimeout;
                 selectPais.addEventListener("change", updateMarkers);
-                buscador.addEventListener("input", updateMarkers);
-
-                // Procesar cada entrada
-                const processPromises = rows.map((entry, index) => {
-                    const universities = entry["Universidad contraparte"]?.split(/\s*,\s*|\s*y\s*/) || [];
-                    return Promise.all(universities.map((univ, i) => 
-                        processUniversity(univ.trim(), entry)
-                    ));
+                buscador.addEventListener("input", () => {
+                    clearTimeout(searchTimeout);
+                    searchTimeout = setTimeout(updateMarkers, 300);
                 });
 
-                // Esperar a que todas las geocodificaciones terminen
-                Promise.all(processPromises).then(() => {
-                    console.log("Todas las geocodificaciones completadas");
-                });
+                // Procesar cada entrada en chunks
+                const chunkSize = 5;
+                const chunks = [];
+                for (let i = 0; i < rows.length; i += chunkSize) {
+                    chunks.push(rows.slice(i, i + chunkSize));
+                }
+
+                let processedChunks = 0;
+                function processNextChunk() {
+                    if (processedChunks >= chunks.length) {
+                        console.log("Todas las geocodificaciones completadas");
+                        return;
+                    }
+
+                    const chunk = chunks[processedChunks];
+                    const promises = chunk.map(entry => {
+                        const universities = entry["Universidad contraparte"]?.split(/\s*,\s*|\s*y\s*/) || [];
+                        return Promise.all(universities.map(univ => 
+                            processUniversity(univ.trim(), entry)
+                        ));
+                    });
+
+                    Promise.all(promises)
+                        .then(() => {
+                            processedChunks++;
+                            processNextChunk();
+                        })
+                        .catch(err => {
+                            console.error("Error procesando chunk:", err);
+                            processedChunks++;
+                            processNextChunk();
+                        });
+                }
+
+                // Iniciar procesamiento
+                processNextChunk();
 
             } catch (err) {
                 throw new Error(`Error procesando datos: ${err.message}`);
