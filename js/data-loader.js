@@ -10,128 +10,214 @@ class DataLoader {
         // Columna fija para geocodificación
         this.COLUMNA_UNIVERSIDAD = 'Universidad contraparte';
         this.callbackName = 'jsonpCallback_' + Math.random().toString(36).substr(2, 9);
+        this.scriptUrl = null;
+        this.error = null;
+        this.debug = true; // Activar modo debug
     }
 
-    // 🖐️ Cargar datos desde Google Sheets
-    async loadData(sheetUrl) {
-        if (this.isLoading) return this.data;
+    /**
+     * Configura la URL del script y los parámetros
+     * @param {Object} config - Configuración del cargador
+     * @param {string} config.scriptUrl - URL base del script
+     * @param {string} config.sheetId - ID del Google Sheet
+     * @param {string} config.sheetName - Nombre de la hoja
+     * @param {string} [config.callback] - Nombre de la función de callback para JSONP
+     */
+    configure(config) {
+        if (this.debug) {
+            console.log('Configurando DataLoader con:', config);
+        }
+
+        if (!config.scriptUrl) {
+            throw new Error('La URL del script es requerida');
+        }
+
+        // Construir URL con parámetros
+        const params = new URLSearchParams({
+            sheetId: config.sheetId,
+            sheetName: config.sheetName,
+            debug: 'true' // Siempre activar debug
+        });
+
+        if (config.callback) {
+            params.append('callback', config.callback);
+        }
+
+        this.scriptUrl = `${config.scriptUrl}?${params.toString()}`;
         
+        if (this.debug) {
+            console.log('URL construida:', this.scriptUrl);
+        }
+    }
+
+    /**
+     * Carga los datos del script
+     * @returns {Promise<Array>} Datos cargados
+     */
+    async load() {
+        if (!this.scriptUrl) {
+            throw new Error('Debe configurar el cargador antes de usar load()');
+        }
+
+        this.isLoading = true;
+        this.error = null;
+
+        if (this.debug) {
+            console.log('Iniciando carga de datos desde:', this.scriptUrl);
+        }
+
         try {
-            this.isLoading = true;
-            this.showLoading();
-
-            console.log('🔍 Intentando cargar datos desde:', sheetUrl);
-
-            // Validar URL
-            if (!sheetUrl) {
-                throw new Error('URL de la hoja no proporcionada');
-            }
-
-            // Limpiar URL
-            sheetUrl = sheetUrl.trim();
-
-            // Extraer parámetros de la URL
-            const urlObj = new URL(sheetUrl);
-            const scriptUrl = urlObj.origin + urlObj.pathname;
-            const params = new URLSearchParams(urlObj.search);
-
-            // Obtener parámetros necesarios
-            const sheetId = params.get('sheetId') || params.get('fileId');
-            const sheetName = params.get('sheetName') || params.get('hoja');
-
-            if (!sheetId) {
-                throw new Error('ID de archivo no encontrado en la URL');
-            }
-
-            if (!sheetName) {
-                throw new Error('Nombre de hoja no encontrado en la URL');
-            }
-
-            // Construir URL con JSONP
-            const finalUrl = `${scriptUrl}?sheetId=${sheetId}&sheetName=${encodeURIComponent(sheetName)}&callback=${this.callbackName}`;
-
-            // Crear promesa para JSONP
-            return new Promise((resolve, reject) => {
-                // Crear función de callback global
-                window[this.callbackName] = (response) => {
-                    // Limpiar
-                    delete window[this.callbackName];
-                    if (script && script.parentNode) {
-                        script.parentNode.removeChild(script);
-                    }
-                    
-                    if (!response.success) {
-                        reject(new Error(response.error || 'Error desconocido'));
-                        return;
-                    }
-                    
-                    // Procesar datos
-                    const rawData = response.data;
-                    if (!Array.isArray(rawData) || rawData.length === 0) {
-                        reject(new Error('No se recibieron datos válidos del sheet'));
-                        return;
-                    }
-
-                    // Validar y limpiar datos
-                    const validData = rawData.map(item => {
-                        if (!item || typeof item !== 'object') {
-                            return null;
-                        }
-
-                        const cleanedItem = { ...item };
-                        const universidad = item[this.COLUMNA_UNIVERSIDAD];
-                        if (!universidad) {
-                            return null;
-                        }
-
-                        cleanedItem[this.COLUMNA_UNIVERSIDAD] = String(universidad).split('\n')[0].trim();
-                        return cleanedItem;
-                    }).filter(Boolean);
-
-                    if (validData.length === 0) {
-                        reject(new Error(`No se encontraron datos válidos en el sheet. Verifica que la columna '${this.COLUMNA_UNIVERSIDAD}' exista y tenga datos.`));
-                        return;
-                    }
-
-                    // Geocodificar las ubicaciones
-                    this.geocoder.batchGeocode(validData.map(item => ({
-                        Universidad: item[this.COLUMNA_UNIVERSIDAD],
-                        País: item['País'] || ''
-                    }))).then(geocoded => {
-                        // Combinar datos con coordenadas
-                        this.data = validData.map((item, index) => ({
-                            ...item,
-                            coordinates: geocoded[index].error ? null : {
-                                lat: geocoded[index].lat,
-                                lng: geocoded[index].lng
-                            }
-                        }));
-                        resolve(this.data);
-                    }).catch(error => {
-                        reject(new Error('Error en la geocodificación: ' + error.message));
-                    });
-                };
-
-                // Crear y agregar script
-                const script = document.createElement('script');
-                script.src = finalUrl;
-                script.onerror = () => {
-                    delete window[this.callbackName];
-                    if (script && script.parentNode) {
-                        script.parentNode.removeChild(script);
-                    }
-                    reject(new Error('Error cargando el script. Verifica que la URL sea correcta y el sheet sea accesible públicamente.'));
-                };
-                document.body.appendChild(script);
+            const response = await fetch(this.scriptUrl, {
+                method: 'GET',
+                mode: 'cors',
+                headers: {
+                    'Accept': 'application/json'
+                }
             });
 
+            if (!response.ok) {
+                throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
+            }
+
+            const contentType = response.headers.get('content-type');
+            if (this.debug) {
+                console.log('Tipo de contenido recibido:', contentType);
+            }
+
+            let data;
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                if (this.debug) {
+                    console.log('Respuesta recibida:', text);
+                }
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    throw new Error(`Error al parsear JSON: ${e.message}. Respuesta: ${text}`);
+                }
+            }
+
+            if (this.debug) {
+                console.log('Datos recibidos:', data);
+            }
+
+            if (!data.success) {
+                throw new Error(data.error || 'Error desconocido al cargar datos');
+            }
+
+            this.data = data.data;
+            return this.data;
+
         } catch (error) {
-            console.error('❌ Error cargando datos:', error);
-            this.hideLoading();
-            throw error;
+            this.error = error;
+            if (this.debug) {
+                console.error('Error cargando datos:', error);
+            }
+            throw new Error(`Error cargando el script: ${error.message}`);
         } finally {
             this.isLoading = false;
         }
+    }
+
+    /**
+     * Carga los datos usando JSONP
+     * @returns {Promise<Array>} Datos cargados
+     */
+    loadJsonp() {
+        if (!this.scriptUrl) {
+            throw new Error('Debe configurar el cargador antes de usar loadJsonp()');
+        }
+
+        this.isLoading = true;
+        this.error = null;
+
+        if (this.debug) {
+            console.log('Iniciando carga JSONP desde:', this.scriptUrl);
+        }
+
+        return new Promise((resolve, reject) => {
+            // Crear función de callback única
+            const callbackName = 'jsonpCallback_' + Math.random().toString(36).substr(2, 5);
+            
+            // Configurar timeout
+            const timeout = setTimeout(() => {
+                delete window[callbackName];
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                this.isLoading = false;
+                this.error = new Error('Timeout al cargar datos');
+                reject(new Error('Timeout al cargar datos'));
+            }, 30000);
+
+            // Configurar función de callback
+            window[callbackName] = (data) => {
+                clearTimeout(timeout);
+                delete window[callbackName];
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                this.isLoading = false;
+
+                if (this.debug) {
+                    console.log('Datos recibidos vía JSONP:', data);
+                }
+
+                if (!data.success) {
+                    this.error = new Error(data.error || 'Error desconocido al cargar datos');
+                    reject(this.error);
+                    return;
+                }
+
+                this.data = data.data;
+                resolve(this.data);
+            };
+
+            // Crear y agregar script
+            const script = document.createElement('script');
+            script.src = this.scriptUrl;
+            script.onerror = (error) => {
+                clearTimeout(timeout);
+                delete window[callbackName];
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                this.isLoading = false;
+                this.error = new Error('Error cargando el script. Verifica que la URL sea correcta y el sheet sea accesible públicamente.');
+                if (this.debug) {
+                    console.error('Error en script:', error);
+                }
+                reject(this.error);
+            };
+
+            document.body.appendChild(script);
+        });
+    }
+
+    /**
+     * Obtiene los datos cargados
+     * @returns {Array|null} Datos cargados o null si no hay datos
+     */
+    getData() {
+        return this.data;
+    }
+
+    /**
+     * Verifica si hay un error
+     * @returns {Error|null} Error si existe, null si no hay error
+     */
+    getError() {
+        return this.error;
+    }
+
+    /**
+     * Verifica si está cargando
+     * @returns {boolean} true si está cargando, false si no
+     */
+    isLoading() {
+        return this.isLoading;
     }
 
     // 🖐️ Mostrar indicador de carga
