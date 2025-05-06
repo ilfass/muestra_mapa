@@ -1,19 +1,13 @@
 /**
- * Mapa Dinámico - JS v1.2.1
+ * Mapa Dinámico - JS v1.3.0
  * 
  * Características:
- * - Carga datos desde Google Sheets usando el endpoint gviz/tq
- * - Geolocalización automática con Nominatim
- * - Sistema de caché para coordenadas en localStorage
- * - Filtros por país y búsqueda por texto
- * - Clustering de marcadores cercanos
- * - Manejo de errores robusto
- * - Detección automática del campo a geocodificar
- * - Separación robusta de múltiples valores
- * - Logs detallados para depuración
- * - Fallback: si no encuentra la universidad, ubica en el país
+ * - Prioriza columnas latitud/longitud (ignorando mayúsculas/minúsculas)
+ * - Si no hay coordenadas, intenta con dirección/universidad
+ * - Si tampoco, intenta con el país
+ * - Solo muestra puntos si hay coordenadas válidas
  * - Color distinto para cada país
- * - Limpieza automática de caché al cargar
+ * - Logs detallados para depuración
  */
 
 // Verificar que la variable global esté disponible
@@ -138,16 +132,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Detección genérica del campo a geocodificar
+    function getColNameInsensitive(cols, name) {
+        return cols.find(c => c && c.toLowerCase() === name.toLowerCase());
+    }
+
     function getGeoFieldName(cols) {
         const posibles = [
             'universidad contraparte', 'universidad', 'dirección', 'direccion', 'ubicacion', 'ubicación', 'partner', 'institución', 'institucion', 'address', 'location'
         ];
         for (let posible of posibles) {
-            const col = cols.find(c => c.toLowerCase().includes(posible));
+            const col = cols.find(c => c && c.toLowerCase().includes(posible));
             if (col) return col;
         }
-        // Si no encuentra, usar la primera columna que no sea año, país, nombre, facultad, equipo, ods, resumen
-        return cols.find(c => !/año|pais|país|nombre|facultad|equipo|ods|resumen/i.test(c)) || cols[0];
+        return cols.find(c => !/año|pais|país|nombre|facultad|equipo|ods|resumen|latitud|longitud|latitude|longitude/i.test(c)) || cols[0];
     }
 
     // Cargar datos de la hoja usando el endpoint gviz/tq
@@ -166,6 +163,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 const json = JSON.parse(text.substr(47).slice(0, -2));
                 const cols = json.table.cols.map(col => col.label);
                 debugLog('Columnas del sheet:', cols);
+                // Detectar columnas de lat/lng ignorando mayúsculas/minúsculas
+                const latCol = getColNameInsensitive(cols, 'latitud') || getColNameInsensitive(cols, 'latitude');
+                const lngCol = getColNameInsensitive(cols, 'longitud') || getColNameInsensitive(cols, 'longitude');
+                debugLog('Columna latitud:', latCol, 'Columna longitud:', lngCol);
                 const geoField = getGeoFieldName(cols);
                 debugLog('Campo a geocodificar detectado:', geoField);
                 
