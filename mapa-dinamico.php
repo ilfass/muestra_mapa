@@ -22,10 +22,10 @@ function mapa_dinamico_enqueue_assets() {
     wp_enqueue_style('leaflet-css', 'https://unpkg.com/leaflet@1.9.3/dist/leaflet.css', [], '1.9.3');
     wp_enqueue_script('leaflet-js', 'https://unpkg.com/leaflet@1.9.3/dist/leaflet.js', [], '1.9.3', true);
 
-    // Script principal desde GitHub
+    // Script principal desde jsDelivr (CDN)
     wp_enqueue_script(
         'mapa-dinamico-js',
-        'https://raw.githubusercontent.com/ilfass/muestra_mapa/main/js/mapa-dinamico.js',
+        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@main/js/mapa-dinamico.js',
         ['leaflet-js'],
         '1.0.1',
         true
