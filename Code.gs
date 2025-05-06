@@ -6,7 +6,7 @@
 
 // Configuración global
 const CONFIG = {
-  VERSION: '1.0.3',
+  VERSION: .1.0.4',
   CACHE_DURATION: 21600, // 6 horas en segundos
   MAX_ROWS: 1000,
   DEFAULT_SHEET_NAME: 'Sheet1',
@@ -77,7 +77,7 @@ function doGet(e) {
       }
     };
 
-    if (params.callback) {
+    if (e.parameter && e.parameter.callback) {
       const content = `${params.callback}(${JSON.stringify(errorResponse)})`;
       return HtmlService.createHtmlOutput(content)
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
