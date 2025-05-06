@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.0.8
+ * Mapa Dinámico - JS v1.1.0
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -8,7 +8,9 @@
  * - Filtros por país y búsqueda por texto
  * - Clustering de marcadores cercanos
  * - Manejo de errores robusto
- * - Retraso configurable entre geocodificaciones
+ * - Detección automática del campo a geocodificar
+ * - Separación robusta de múltiples valores
+ * - Logs detallados para depuración
  */
 
 // Verificar que la variable global esté disponible
@@ -106,6 +108,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    // Detección genérica del campo a geocodificar
+    function getGeoFieldName(cols) {
+        const posibles = [
+            'universidad contraparte', 'universidad', 'dirección', 'direccion', 'ubicacion', 'ubicación', 'partner', 'institución', 'institucion', 'address', 'location'
+        ];
+        for (let posible of posibles) {
+            const col = cols.find(c => c.toLowerCase().includes(posible));
+            if (col) return col;
+        }
+        // Si no encuentra, usar la primera columna que no sea año, país, nombre, facultad, equipo, ods, resumen
+        return cols.find(c => !/año|pais|país|nombre|facultad|equipo|ods|resumen/i.test(c)) || cols[0];
+    }
+
     // Cargar datos de la hoja usando el endpoint gviz/tq
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
     debugLog('URL del sheet:', sheetUrl);
@@ -120,12 +135,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 debugLog('Respuesta raw del sheet:', text.substring(0, 200) + '...');
                 
                 const json = JSON.parse(text.substr(47).slice(0, -2));
-                debugLog('Columnas del sheet:', json.table.cols.map(col => col.label));
+                const cols = json.table.cols.map(col => col.label);
+                debugLog('Columnas del sheet:', cols);
+                const geoField = getGeoFieldName(cols);
+                debugLog('Campo a geocodificar detectado:', geoField);
                 
                 const rows = json.table.rows.map(row => {
                     const obj = {};
                     row.c.forEach((cell, i) => {
-                        obj[json.table.cols[i].label] = cleanText(cell?.v || "");
+                        obj[cols[i]] = cleanText(cell?.v || "");
                     });
                     return obj;
                 });
@@ -133,7 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 debugLog('Datos procesados:', rows);
 
                 // Llenar select de países
-                const paises = [...new Set(rows.map(row => row["País"]).filter(Boolean))].sort();
+                const paises = [...new Set(rows.map(row => row["País"] || row["pais"]).filter(Boolean))].sort();
                 debugLog('Países encontrados:', paises);
                 
                 const selectPais = document.getElementById("filtro-pais");
@@ -155,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 function processUniversity(university, entry, retryCount = 0) {
                     if (!university) return Promise.resolve();
                     
-                    debugLog('Procesando universidad:', university);
+                    debugLog('Procesando para geocodificar:', { campo: geoField, valor: university, entry });
                     debugLog('Datos de la entrada:', entry);
                     
                     // Verificar caché
@@ -225,7 +243,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         <div class="info">
                             <h4>${university}</h4>
                             ${Object.entries(entry)
-                                .filter(([key, val]) => val && key !== "Universidad contraparte" && key !== "Nombre")
+                                .filter(([key, val]) => val && key !== geoField && key !== "Nombre")
                                 .map(([key, val]) => `<strong>${key}:</strong> ${val}`)
                                 .join("<br>")}
                         </div>
@@ -237,7 +255,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     allMarkers.push({
                         marker,
                         entry,
-                        searchText: `${university} ${entry["País"] || ""}`.toLowerCase()
+                        searchText: `${university} ${(entry["País"] || entry["pais"] || "")}`.toLowerCase()
                     });
                     
                     markers.addLayer(marker);
@@ -248,14 +266,14 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (isLoading) return;
                     
                     const paisSeleccionado = selectPais.value;
-                    const busqueda = cleanText(buscador.value);
+                    const busqueda = buscador.value.trim().toLowerCase();
                     
                     debugLog('Actualizando marcadores:', { paisSeleccionado, busqueda });
                     
                     markers.clearLayers();
                     
                     allMarkers.forEach(({ marker, entry, searchText }) => {
-                        const matchPais = !paisSeleccionado || entry["País"] === paisSeleccionado;
+                        const matchPais = !paisSeleccionado || (entry["País"] || entry["pais"]) === paisSeleccionado;
                         const matchBusqueda = !busqueda || searchText.includes(busqueda);
                         
                         if (matchPais && matchBusqueda) {
@@ -292,10 +310,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     debugLog(`Procesando chunk ${processedChunks + 1}/${chunks.length}`);
                     const chunk = chunks[processedChunks];
                     const promises = chunk.map(entry => {
-                        const universities = entry["Universidad contraparte"]?.split(/\s*,\s*|\s*y\s*/) || [];
-                        debugLog('Universidades en chunk:', universities);
+                        // Separar múltiples valores por coma, salto de línea, punto y coma, barra, y, etc.
+                        let raw = entry[geoField] || '';
+                        let universities = raw.split(/,|;|\n|\||\/| y | Y |\s{2,}/).map(u => cleanText(u)).filter(Boolean);
+                        debugLog('Valores a geocodificar en esta fila:', universities);
                         return Promise.all(universities.map(univ => 
-                            processUniversity(univ.trim(), entry)
+                            processUniversity(univ, entry)
                         ));
                     });
 
