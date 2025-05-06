@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.0.6
+ * Mapa Dinámico - JS v1.0.7
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -15,9 +15,10 @@
 if (typeof MapaDinamico === 'undefined') {
     console.error('La variable global MapaDinamico no está definida');
     MapaDinamico = {
-        geocodingDelay: 1500, // Aumentado para evitar rate limiting
+        geocodingDelay: 2000, // Aumentado para evitar rate limiting
         nominatimUrl: 'https://nominatim.openstreetmap.org/search',
-        maxRetries: 3 // Número máximo de reintentos
+        maxRetries: 3, // Número máximo de reintentos
+        chunkSize: 3 // Reducido para mejor manejo
     };
 }
 
@@ -46,14 +47,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Inicializar cluster de marcadores con configuración mejorada
     const markers = L.markerClusterGroup({
-        maxClusterRadius: 30, // Reducido para clusters más pequeños
+        maxClusterRadius: 20, // Reducido para clusters más pequeños
         spiderfyOnMaxZoom: true,
-        showCoverageOnHover: false,
+        showCoverageOnHover: true,
         zoomToBoundsOnClick: true,
-        disableClusteringAtZoom: 5, // Desactivar clustering en zoom cercano
-        chunkedLoading: true, // Cargar marcadores en chunks
-        chunkInterval: 200, // Intervalo entre chunks
-        chunkDelay: 50, // Delay entre chunks
+        disableClusteringAtZoom: 6, // Desactivar clustering en zoom cercano
+        chunkedLoading: true,
+        chunkInterval: 100,
+        chunkDelay: 50,
         iconCreateFunction: function(cluster) {
             const count = cluster.getChildCount();
             let size = 'small';
@@ -72,6 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Cache de coordenadas desde localStorage
     const coordsCache = JSON.parse(localStorage.getItem('coordsCache') || '{}');
     let allMarkers = [];
+    let isLoading = true;
 
     // Función para limpiar texto
     function cleanText(text) {
@@ -81,6 +83,15 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/\s+/g, ' ')
             .trim()
             .toLowerCase();
+    }
+
+    // Función para actualizar el estado de carga
+    function updateLoadingState(loading) {
+        isLoading = loading;
+        const loadingEl = document.querySelector('.loading');
+        if (loadingEl) {
+            loadingEl.style.display = loading ? 'block' : 'none';
+        }
     }
 
     // Cargar datos de la hoja usando el endpoint gviz/tq
@@ -200,6 +211,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Función para actualizar marcadores según filtros
                 function updateMarkers() {
+                    if (isLoading) return; // No actualizar mientras carga
+                    
                     const paisSeleccionado = selectPais.value;
                     const busqueda = cleanText(buscador.value);
                     
@@ -224,16 +237,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
 
                 // Procesar cada entrada en chunks
-                const chunkSize = 5;
                 const chunks = [];
-                for (let i = 0; i < rows.length; i += chunkSize) {
-                    chunks.push(rows.slice(i, i + chunkSize));
+                for (let i = 0; i < rows.length; i += MapaDinamico.chunkSize) {
+                    chunks.push(rows.slice(i, i + MapaDinamico.chunkSize));
                 }
 
                 let processedChunks = 0;
                 function processNextChunk() {
                     if (processedChunks >= chunks.length) {
                         console.log("Todas las geocodificaciones completadas");
+                        updateLoadingState(false);
+                        updateMarkers(); // Actualizar marcadores al terminar
                         return;
                     }
 
@@ -271,5 +285,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     Error al cargar los datos del mapa.<br>
                     Detalles: ${err.message}
                 </p>`;
+            updateLoadingState(false);
         });
 }); 
