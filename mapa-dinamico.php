@@ -2,15 +2,16 @@
 /**
  * Plugin Name: Mapa Dinámico
  * Description: Muestra un mapa interactivo con datos de Google Sheets usando LeafletJS.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Tu Nombre
  * 
  * Características:
  * - Genérico: funciona con cualquier hoja de cálculo pública
- * - Geolocalización automática
- * - Sistema de caché para coordenadas
+ * - Geolocalización automática usando Nominatim
+ * - Sistema de caché para coordenadas en localStorage
  * - Filtros por país
  * - Código modular y versionado
+ * - Manejo de errores robusto
  */
 
 defined('ABSPATH') or die('No script kiddies please!');
@@ -26,7 +27,7 @@ function mapa_dinamico_enqueue_assets() {
         'mapa-dinamico-js',
         'https://raw.githubusercontent.com/ilfass/muestra_mapa/main/js/mapa-dinamico.js',
         ['leaflet-js'],
-        '1.0.0',
+        '1.0.1',
         true
     );
 
