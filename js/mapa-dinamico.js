@@ -1,11 +1,12 @@
 /**
- * Mapa Dinámico - JS v1.0.1
+ * Mapa Dinámico - JS v1.0.2
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
  * - Geolocalización automática con Nominatim
  * - Sistema de caché para coordenadas en localStorage
- * - Filtros por país
+ * - Filtros por país y búsqueda por texto
+ * - Clustering de marcadores cercanos
  * - Manejo de errores robusto
  * - Retraso configurable entre geocodificaciones
  */
@@ -14,7 +15,7 @@
 if (typeof MapaDinamico === 'undefined') {
     console.error('La variable global MapaDinamico no está definida');
     MapaDinamico = {
-        geocodingDelay: 1000,
+        geocodingDelay: 500, // Reducido para mayor velocidad
         nominatimUrl: 'https://nominatim.openstreetmap.org/search'
     };
 }
@@ -39,9 +40,25 @@ document.addEventListener("DOMContentLoaded", () => {
         attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
+    // Inicializar cluster de marcadores
+    const markers = L.markerClusterGroup({
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        iconCreateFunction: function(cluster) {
+            return L.divIcon({
+                html: `<div class="cluster-count">${cluster.getChildCount()}</div>`,
+                className: 'marker-cluster',
+                iconSize: L.point(40, 40)
+            });
+        }
+    });
+    map.addLayer(markers);
+
     // Cache de coordenadas desde localStorage
     const coordsCache = JSON.parse(localStorage.getItem('coordsCache') || '{}');
-    let markers = [];
+    let allMarkers = [];
 
     // Cargar datos de la hoja usando el endpoint gviz/tq
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
@@ -66,10 +83,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 // Llenar select de países
                 const paises = [...new Set(rows.map(row => row["País"]).filter(Boolean))].sort();
                 const selectPais = document.getElementById("filtro-pais");
-                if (!selectPais) {
-                    console.warn("No se encontró el select de países");
+                const buscador = document.getElementById("buscador-mapa");
+                
+                if (!selectPais || !buscador) {
+                    console.warn("No se encontraron los elementos de filtrado");
                     return;
                 }
+
                 paises.forEach(pais => {
                     const option = document.createElement("option");
                     option.value = pais;
@@ -91,71 +111,93 @@ document.addEventListener("DOMContentLoaded", () => {
                     
                     const marker = L.marker([coords.lat, coords.lng])
                         .bindPopup(popupContent);
-                    markers.push({ marker, entry });
-                    marker.addTo(map);
+                    
+                    allMarkers.push({
+                        marker,
+                        entry,
+                        searchText: `${entry["Universidad Contraparte"] || ""} ${entry["Nombre"] || ""} ${entry["País"] || ""}`.toLowerCase()
+                    });
+                    
+                    markers.addLayer(marker);
                 }
 
-                // Función para actualizar marcadores según filtro
+                // Función para actualizar marcadores según filtros
                 function updateMarkers() {
                     const paisSeleccionado = selectPais.value;
-                    markers.forEach(({ marker, entry }) => {
-                        if (!paisSeleccionado || entry["País"] === paisSeleccionado) {
-                            marker.addTo(map);
-                        } else {
-                            marker.remove();
+                    const busqueda = buscador.value.toLowerCase();
+                    
+                    markers.clearLayers();
+                    
+                    allMarkers.forEach(({ marker, entry, searchText }) => {
+                        const matchPais = !paisSeleccionado || entry["País"] === paisSeleccionado;
+                        const matchBusqueda = !busqueda || searchText.includes(busqueda);
+                        
+                        if (matchPais && matchBusqueda) {
+                            markers.addLayer(marker);
                         }
                     });
                 }
 
-                // Evento de cambio en el filtro
+                // Eventos de cambio en los filtros
                 selectPais.addEventListener("change", updateMarkers);
+                buscador.addEventListener("input", updateMarkers);
 
                 // Geolocalizar cada entrada con retraso configurable
-                rows.forEach((entry, index) => {
+                const geocodePromises = rows.map((entry, index) => {
                     const nombre = entry["Universidad Contraparte"] || entry["Nombre"];
                     if (!nombre) {
                         console.warn("Entrada sin nombre:", entry);
-                        return;
+                        return Promise.resolve();
                     }
 
                     // Verificar caché
                     if (coordsCache[nombre]) {
                         addMarker(coordsCache[nombre], entry);
-                        return;
+                        return Promise.resolve();
                     }
 
                     // Si no está en caché, geocodificar con retraso
-                    setTimeout(() => {
-                        fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(nombre)}&format=json&limit=1`)
-                            .then(res => {
-                                if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-                                return res.json();
-                            })
-                            .then(data => {
-                                if (data.length) {
-                                    const coords = {
-                                        lat: parseFloat(data[0].lat),
-                                        lng: parseFloat(data[0].lon)
-                                    };
-                                    // Guardar en caché
-                                    coordsCache[nombre] = coords;
-                                    localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
-                                    // Añadir marcador
-                                    addMarker(coords, entry);
-                                } else {
-                                    console.warn("No se encontró ubicación para:", nombre);
-                                }
-                            })
-                            .catch(err => {
-                                console.error("Error geocodificando:", nombre, err);
-                                // Reintentar después de un error
-                                setTimeout(() => {
-                                    delete coordsCache[nombre];
-                                    localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
-                                }, 5000);
-                            });
-                    }, index * MapaDinamico.geocodingDelay);
+                    return new Promise(resolve => {
+                        setTimeout(() => {
+                            fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(nombre)}&format=json&limit=1`)
+                                .then(res => {
+                                    if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
+                                    return res.json();
+                                })
+                                .then(data => {
+                                    if (data.length) {
+                                        const coords = {
+                                            lat: parseFloat(data[0].lat),
+                                            lng: parseFloat(data[0].lon)
+                                        };
+                                        // Guardar en caché
+                                        coordsCache[nombre] = coords;
+                                        localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
+                                        // Añadir marcador
+                                        addMarker(coords, entry);
+                                    } else {
+                                        console.warn("No se encontró ubicación para:", nombre);
+                                    }
+                                    resolve();
+                                })
+                                .catch(err => {
+                                    console.error("Error geocodificando:", nombre, err);
+                                    // Reintentar después de un error
+                                    setTimeout(() => {
+                                        delete coordsCache[nombre];
+                                        localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
+                                    }, 5000);
+                                    resolve();
+                                });
+                        }, index * MapaDinamico.geocodingDelay);
+                    });
                 });
+
+                // Esperar a que todas las geocodificaciones terminen
+                Promise.all(geocodePromises).then(() => {
+                    console.log("Todas las geocodificaciones completadas");
+                });
+
             } catch (err) {
                 throw new Error(`Error procesando datos: ${err.message}`);
             }
