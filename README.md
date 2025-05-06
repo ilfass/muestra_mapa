@@ -1,99 +1,76 @@
-# Mapa Dinámico de Acuerdos Internacionales
+# Mapa Dinámico para WordPress
 
-Plugin de WordPress que muestra un mapa interactivo de acuerdos internacionales utilizando LeafletJS y datos de Google Sheets.
+Plugin de WordPress para mostrar un mapa interactivo con datos de Google Sheets usando LeafletJS.
 
-## 🎯 Características
+## Características
 
-- Mapa interactivo con LeafletJS
-- Datos en tiempo real desde Google Sheets
-- Geocodificación automática de universidades
-- Filtros dinámicos por país y tipo de acuerdo
-- Marcadores personalizados
-- Diseño responsivo
-- Caché local para optimizar rendimiento
+- 🌍 Muestra datos de cualquier hoja de cálculo pública de Google Sheets
+- 📍 Geolocalización automática usando Nominatim
+- 🔄 Sistema de caché para coordenadas
+- 🌐 Filtros por país
+- 🎨 Diseño responsive y personalizable
+- 📱 Compatible con dispositivos móviles
 
-## 📋 Requisitos
+## Instalación
 
-- WordPress 5.0 o superior
-- Google Sheets con datos de acuerdos
-- Google Apps Script desplegado como web app
+1. Descarga el plugin y colócalo en la carpeta `wp-content/plugins/` de tu instalación de WordPress
+2. Activa el plugin desde el panel de administración de WordPress
+3. Usa el shortcode `[mapa_dinamico sheet="ID_DE_TU_HOJA"]` en cualquier página o post
 
-## 🚀 Instalación
+## Uso
 
-1. Clonar el repositorio en la carpeta de plugins de WordPress:
-```bash
-cd wp-content/plugins
-git clone https://github.com/ilfass/muestra_mapa.git
+### Shortcode Básico
+```
+[mapa_dinamico sheet="ID_DE_TU_HOJA"]
 ```
 
-2. Activar el plugin desde el panel de WordPress
+### Estructura de la Hoja de Cálculo
 
-3. Configurar el Google Apps Script:
-   - Copiar el contenido de `Code.gs` a un nuevo proyecto de Google Apps Script
-   - Desplegar como aplicación web
-   - Copiar la URL de despliegue
+La hoja de cálculo debe tener las siguientes columnas:
+- `Universidad Contraparte` o `Nombre`: Nombre de la institución a geolocalizar
+- `País`: País de la institución (para filtros)
+- Cualquier otra columna se mostrará en el popup del marcador
 
-4. Insertar el shortcode en cualquier página:
-```
-[mapa_dinamico sheet_id="ID_DE_LA_HOJA" sheet_name="NOMBRE_HOJA" filtro="País"]
-```
+### Personalización
 
-## 📁 Estructura del Proyecto
+El plugin incluye estilos CSS personalizables. Puedes sobrescribirlos en tu tema:
 
-```
-muestra_mapa/
-├── Code.gs                 # Script de Google Apps
-├── mapa-shortcode.php      # Shortcode de WordPress
-├── js/
-│   ├── main.js            # Inicialización principal
-│   ├── data-loader.js     # Carga de datos desde Sheets
-│   ├── map-manager.js     # Gestión del mapa
-│   ├── geocoder.js        # Servicio de geocodificación
-│   └── cache-manager.js   # Gestión de caché
-├── css/
-│   └── estilos.css        # Estilos del mapa
-└── README.md              # Documentación
+```css
+.mapa-dinamico {
+    height: 500px;
+    width: 100%;
+}
+
+.mapa-dinamico .info {
+    /* Estilos del popup */
+}
+
+.mapa-dinamico-filtros select {
+    /* Estilos del selector de países */
+}
 ```
 
-## 🔧 Configuración
+## Versiones
 
-### Google Sheets
-La hoja de cálculo debe contener las siguientes columnas:
-- Universidad contraparte
-- País
-- Tipo de acuerdo
-- Fecha
-- Estado
-- Información adicional
+- Plugin: 1.0.0
+- JavaScript: 1.0.0
+- Leaflet: 1.9.3
 
-### Google Apps Script
-1. Crear nuevo proyecto
-2. Copiar contenido de `Code.gs`
-3. Desplegar como aplicación web
-4. Configurar permisos de acceso
+## Contribuir
 
-## 🎨 Personalización
-
-### Estilos
-Los estilos se pueden personalizar editando `css/estilos.css`
-
-### Marcadores
-Los marcadores se pueden personalizar en `js/map-manager.js`
-
-## 🤝 Contribuir
-
-1. Fork el repositorio
-2. Crear rama para tu feature (`git checkout -b feature/AmazingFeature`)
+1. Haz fork del repositorio
+2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
 3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
 4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abrir un Pull Request
+5. Abre un Pull Request
 
-## 📝 Licencia
+## Licencia
 
 Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
 
-## ✨ Créditos
+## Soporte
 
-- [Leaflet](https://leafletjs.com/) - Biblioteca de mapas
-- [Nominatim](https://nominatim.org/) - Servicio de geocodificación
-- [Google Apps Script](https://developers.google.com/apps-script) - Backend
+Si encuentras algún problema o tienes sugerencias, por favor:
+1. Revisa la [documentación](https://github.com/ilfass/muestra_mapa/wiki)
+2. Abre un issue en GitHub
+3. Contacta al equipo de soporte
