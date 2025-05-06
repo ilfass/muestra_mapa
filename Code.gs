@@ -1,18 +1,16 @@
 /**
- * Versión: 1.0.8
+ * Versión: 1.0.9
  * Última actualización: 2024-03-19
  * Descripción: Script para acceder a datos de Google Sheets con geocodificación automática
  */
 
 // Configuración global
 const CONFIG = {
-  VERSION: "1.0.8",
+  VERSION: "1.0.9",
   CACHE_DURATION: 21600, // 6 horas en segundos
   GEOCODING_DELAY: 1000, // 1 segundo entre solicitudes de geocodificación
   NOMINATIM_URL: 'https://nominatim.openstreetmap.org/search',
-  SHEET_CACHE_KEY: 'SHEET_DATA_',
-  COORDS_CACHE_KEY: 'COORDS_DATA',
-  DEFAULT_SHEET_NAME: 'Sheet1'
+  COORDS_CACHE_KEY: 'COORDS_DATA'
 };
 
 /**
@@ -24,11 +22,28 @@ function doGet(e) {
   try {
     // Validar parámetros
     const params = e.parameter || {};
-    const sheetName = params.sheetName || params.sheet || CONFIG.DEFAULT_SHEET_NAME;
+    const sheetId = params.sheetId || SpreadsheetApp.getActiveSpreadsheet().getId();
+    const sheetName = params.sheetName || params.sheet || 'Sheet1';
     const format = params.format || "json";
     
-    // Obtener y procesar datos
-    const data = getProcessedData(sheetName);
+    // Obtener datos usando gviz/tq
+    const gvizUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+    const response = UrlFetchApp.fetch(gvizUrl);
+    const jsonText = response.getContentText();
+    const jsonData = JSON.parse(jsonText.substr(47).slice(0, -2));
+    
+    // Procesar datos
+    const cols = jsonData.table.cols.map(col => col.label);
+    const rows = jsonData.table.rows.map(row => {
+      const obj = {};
+      row.c.forEach((cell, i) => {
+        obj[cols[i]] = cell?.v || "";
+      });
+      return obj;
+    });
+
+    // Procesar coordenadas
+    const data = processCoordinates(rows);
     
     // Preparar respuesta según formato
     let output;
@@ -73,64 +88,6 @@ function doGet(e) {
 }
 
 /**
- * Obtiene y procesa los datos con caché
- * @param {string} sheetName - Nombre de la hoja
- * @return {Array} Datos procesados
- */
-function getProcessedData(sheetName) {
-  const cache = CacheService.getScriptCache();
-  const cacheKey = CONFIG.SHEET_CACHE_KEY + sheetName;
-  
-  // Intentar obtener datos del caché
-  let data = cache.get(cacheKey);
-  if (data != null) {
-    return JSON.parse(data);
-  }
-  
-  // Si no hay caché, obtener datos frescos
-  data = getSheetData(sheetName);
-  
-  // Procesar coordenadas
-  data = processCoordinates(data);
-  
-  // Guardar en caché
-  cache.put(cacheKey, JSON.stringify(data), CONFIG.CACHE_DURATION);
-  
-  return data;
-}
-
-/**
- * Obtiene datos de la hoja
- * @param {string} sheetName - Nombre de la hoja
- * @return {Array} Datos de la hoja
- */
-function getSheetData(sheetName) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet()
-    .getSheetByName(sheetName);
-    
-  if (!sheet) {
-    throw new Error(`Hoja "${sheetName}" no encontrada`);
-  }
-  
-  const range = sheet.getDataRange();
-  const values = range.getValues();
-  const headers = values[0];
-  
-  return values.slice(1)
-    .map(row => {
-      const item = {};
-      headers.forEach((header, index) => {
-        item[header] = row[index];
-      });
-      return item;
-    })
-    .filter(item => {
-      const universidad = item['Universidad'] || item['Universidad contraparte'];
-      return universidad && universidad.toString().trim() !== '';
-    });
-}
-
-/**
  * Procesa las coordenadas de las universidades
  * @param {Array} data - Datos a procesar
  * @return {Array} Datos con coordenadas
@@ -141,7 +98,7 @@ function processCoordinates(data) {
   let coordsData = coordsCache ? JSON.parse(coordsCache) : {};
   
   data = data.map(item => {
-    const universidad = item['Universidad'] || item['Universidad contraparte'];
+    const universidad = item['Universidad'] || item['Universidad Contraparte'];
     if (!universidad) return item;
     
     // Buscar en caché primero
@@ -216,22 +173,6 @@ function convertToCSV(data) {
 function clearCache() {
   const cache = CacheService.getScriptCache();
   cache.remove(CONFIG.COORDS_CACHE_KEY);
-  
-  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
-  sheets.forEach(sheet => {
-    cache.remove(CONFIG.SHEET_CACHE_KEY + sheet.getName());
-  });
-}
-
-/**
- * Actualiza los datos manualmente
- */
-function updateData() {
-  clearCache();
-  const sheets = SpreadsheetApp.getActiveSpreadsheet().getSheets();
-  sheets.forEach(sheet => {
-    getProcessedData(sheet.getName());
-  });
 }
 
 /**
@@ -240,7 +181,6 @@ function updateData() {
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Mapa Dinámico')
-    .addItem('Actualizar Datos', 'updateData')
-    .addItem('Limpiar Caché', 'clearCache')
+    .addItem('Limpiar Caché de Coordenadas', 'clearCache')
     .addToUi();
 }
