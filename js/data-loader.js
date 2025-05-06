@@ -66,59 +66,60 @@ class DataLoader {
             console.log('Iniciando carga de datos desde:', this.scriptUrl);
         }
 
-        try {
-            const response = await fetch(this.scriptUrl, {
-                method: 'GET',
-                mode: 'cors',
-                headers: {
-                    'Accept': 'application/json'
+        return new Promise((resolve, reject) => {
+            // Configurar timeout
+            const timeout = setTimeout(() => {
+                delete window[this.callbackName];
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
                 }
-            });
+                this.isLoading = false;
+                this.error = new Error('Timeout al cargar datos');
+                reject(new Error('Timeout al cargar datos'));
+            }, 30000);
 
-            if (!response.ok) {
-                throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
-            }
+            // Configurar función de callback
+            window[this.callbackName] = (data) => {
+                clearTimeout(timeout);
+                delete window[this.callbackName];
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                this.isLoading = false;
 
-            const contentType = response.headers.get('content-type');
-            if (this.debug) {
-                console.log('Tipo de contenido recibido:', contentType);
-            }
-
-            let data;
-            if (contentType && contentType.includes('application/json')) {
-                data = await response.json();
-            } else {
-                const text = await response.text();
                 if (this.debug) {
-                    console.log('Respuesta recibida:', text);
+                    console.log('Datos recibidos:', data);
                 }
-                try {
-                    data = JSON.parse(text);
-                } catch (e) {
-                    throw new Error(`Error al parsear JSON: ${e.message}. Respuesta: ${text}`);
+
+                if (!data.success) {
+                    this.error = new Error(data.error || 'Error desconocido al cargar datos');
+                    reject(this.error);
+                    return;
                 }
-            }
 
-            if (this.debug) {
-                console.log('Datos recibidos:', data);
-            }
+                this.data = data.data;
+                resolve(this.data);
+            };
 
-            if (!data.success) {
-                throw new Error(data.error || 'Error desconocido al cargar datos');
-            }
+            // Crear y agregar script
+            const script = document.createElement('script');
+            script.src = this.scriptUrl;
+            script.onerror = (error) => {
+                clearTimeout(timeout);
+                delete window[this.callbackName];
+                if (script && script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                this.isLoading = false;
+                this.error = new Error('Error cargando el script. Verifica que la URL sea correcta y el sheet sea accesible públicamente.');
+                if (this.debug) {
+                    console.error('Error en script:', error);
+                }
+                reject(this.error);
+            };
 
-            this.data = data.data;
-            return this.data;
-
-        } catch (error) {
-            this.error = error;
-            if (this.debug) {
-                console.error('Error cargando datos:', error);
-            }
-            throw new Error(`Error cargando el script: ${error.message}`);
-        } finally {
-            this.isLoading = false;
-        }
+            document.body.appendChild(script);
+        });
     }
 
     /**

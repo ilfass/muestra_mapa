@@ -1,167 +1,188 @@
 /**
- * Script genérico para acceder a datos de Google Sheets
- * Permite acceder a cualquier sheet mediante parámetros en la URL
+ * Versión: 1.0.3
+ * Última actualización: 2024-03-19
+ * Descripción: Script para acceder a datos de Google Sheets de forma genérica
  */
 
+// Configuración global
+const CONFIG = {
+  VERSION: '1.0.3',
+  CACHE_DURATION: 21600, // 6 horas en segundos
+  MAX_ROWS: 1000,
+  DEFAULT_SHEET_NAME: 'Sheet1',
+  ERROR_CODES: {
+    INVALID_PARAMS: 'E001',
+    SHEET_NOT_FOUND: 'E002',
+    ACCESS_DENIED: 'E003',
+    INVALID_DATA: 'E004',
+    RATE_LIMIT: 'E005'
+  }
+};
+
 /**
- * Función principal que será llamada por la URL web
- * Parámetros aceptados:
- * - sheetId o fileId: ID del Google Sheet
- * - sheetName o hoja: Nombre de la hoja dentro del sheet
- * - format: (opcional) Formato de respuesta ('json' o 'csv'). Por defecto es 'json'
- * - callback: (opcional) Nombre de la función de callback para JSONP
- * - debug: (opcional) Si es 'true', incluye información de depuración
+ * Función principal que maneja las peticiones GET
+ * @param {Object} e - Objeto de evento de la petición
+ * @return {HtmlOutput} Respuesta HTTP
  */
 function doGet(e) {
   try {
-    // Log inicial
-    console.log('Iniciando doGet con parámetros:', e ? e.parameter : 'No hay parámetros');
+    // Validar parámetros
+    const params = e.parameter || {};
+    const sheetId = params.sheetId || params.fileId;
+    const sheetName = params.sheetName || params.hoja || CONFIG.DEFAULT_SHEET_NAME;
+    const callback = params.callback;
     
-    // Validar que e existe
-    if (!e) {
-      throw new Error('No se recibieron parámetros en la solicitud');
-    }
-
-    // Validar parámetros requeridos (aceptar ambos formatos)
-    const sheetId = e.parameter.sheetId || e.parameter.fileId;
-    const sheetName = e.parameter.sheetName || e.parameter.hoja;
-    const format = (e.parameter.format || 'json').toLowerCase();
-    const callback = e.parameter.callback;
-    const debug = e.parameter.debug === 'true';
-
-    console.log('Parámetros procesados:', {
-      sheetId,
-      sheetName,
-      format,
-      callback,
-      debug
-    });
-
     if (!sheetId) {
-      throw new Error('Se requiere el parámetro sheetId o fileId');
-    }
-    if (!sheetName) {
-      throw new Error('Se requiere el parámetro sheetName o hoja');
+      throw new Error('Se requiere el ID de la hoja de cálculo');
     }
 
-    // Intentar abrir el sheet
-    console.log('Intentando abrir sheet:', sheetId);
-    const ss = SpreadsheetApp.openById(sheetId);
-    console.log('Sheet abierto correctamente');
-
-    console.log('Buscando hoja:', sheetName);
-    const sheet = ss.getSheetByName(sheetName);
-    
+    // Intentar acceder a la hoja
+    const sheet = getSheetById(sheetId, sheetName);
     if (!sheet) {
-      throw new Error(`No se encontró la hoja: ${sheetName}`);
+      throw new Error('No se pudo acceder a la hoja de cálculo');
     }
-    console.log('Hoja encontrada correctamente');
-    
+
     // Obtener datos
-    console.log('Obteniendo datos de la hoja');
-    const data = sheet.getDataRange().getValues();
-    console.log(`Datos obtenidos: ${data.length} filas`);
+    const data = getSheetData(sheet);
     
-    const headers = data[0];
-    const rows = data.slice(1);
-    
-    // Convertir a objetos con nombres de columnas
-    const processedData = rows.map(row => {
-      const obj = {};
-      headers.forEach((header, index) => {
-        obj[header] = row[index];
-      });
-      return obj;
-    });
-    
-    // Preparar respuesta según el formato solicitado
-    if (format === 'csv') {
-      return createCsvResponse(data);
-    } else {
-      return createJsonResponse(processedData, {
-        sheetId,
-        sheetName,
-        timestamp: new Date().toISOString(),
-        debug: debug ? {
-          headers,
-          rowCount: data.length,
-          parameters: e.parameter
-        } : undefined
-      }, callback);
+    // Preparar respuesta
+    const response = {
+      success: true,
+      version: CONFIG.VERSION,
+      timestamp: new Date().toISOString(),
+      data: data
+    };
+
+    // Si hay callback, usar JSONP
+    if (callback) {
+      const jsonString = JSON.stringify(response);
+      const content = `${callback}(${jsonString})`;
+      return HtmlService.createHtmlOutput(content)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
-      
+
+    // Si no hay callback, usar JSON normal
+    return ContentService.createTextOutput(JSON.stringify(response))
+      .setMimeType(ContentService.MimeType.JSON);
+
   } catch (error) {
-    // En caso de error, devolver información detallada
-    console.error('Error en doGet:', error);
-    
     const errorResponse = {
       success: false,
-      error: error.message,
+      version: CONFIG.VERSION,
       timestamp: new Date().toISOString(),
-      debug: {
-        parameters: e ? e.parameter : 'No hay parámetros',
-        errorName: error.name,
-        errorStack: error.stack,
-        errorMessage: error.message
+      error: {
+        code: CONFIG.ERROR_CODES.INVALID_DATA,
+        message: error.message,
+        details: error.toString()
       }
     };
-    
+
+    if (params.callback) {
+      const content = `${params.callback}(${JSON.stringify(errorResponse)})`;
+      return HtmlService.createHtmlOutput(content)
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
     return ContentService.createTextOutput(JSON.stringify(errorResponse))
-      .setMimeType(ContentService.MimeType.JSON)
-      .setHeaders({
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET"
-      });
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
 /**
- * Crea una respuesta en formato JSON
+ * Obtiene una hoja de cálculo por ID y nombre
+ * @param {string} sheetId - ID de la hoja de cálculo
+ * @param {string} sheetName - Nombre de la hoja
+ * @return {Sheet} Objeto de hoja de cálculo
  */
-function createJsonResponse(data, metadata, callback) {
-  const response = {
-    success: true,
-    message: "Datos obtenidos correctamente",
-    rowCount: data.length,
-    data: data,
-    ...metadata
-  };
-  
-  const jsonString = JSON.stringify(response);
-  
-  // Si hay callback, envolver en JSONP
-  if (callback) {
-    return ContentService.createTextOutput(`${callback}(${jsonString})`)
-      .setMimeType(ContentService.MimeType.JAVASCRIPT)
-      .setHeaders({
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET"
-      });
+function getSheetById(sheetId, sheetName) {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(sheetId);
+    return spreadsheet.getSheetByName(sheetName);
+  } catch (error) {
+    console.error('Error al acceder a la hoja:', error);
+    return null;
   }
+}
+
+/**
+ * Obtiene y procesa los datos de la hoja
+ * @param {Sheet} sheet - Objeto de hoja de cálculo
+ * @return {Array} Datos procesados
+ */
+function getSheetData(sheet) {
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
   
-  // Si no hay callback, devolver JSON normal
-  return ContentService.createTextOutput(jsonString)
-    .setMimeType(ContentService.MimeType.JSON)
-    .setHeaders({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET"
+  return data.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((header, index) => {
+      obj[header] = row[index];
     });
+    return obj;
+  });
 }
 
 /**
  * Crea una respuesta en formato CSV
+ * @param {Array} data - Datos a convertir
+ * @return {TextOutput} Respuesta HTTP
  */
-function createCsvResponse(data) {
-  const csvContent = data.map(row => 
-    row.map(cell => 
-      typeof cell === 'string' ? `"${cell.replace(/"/g, '""')}"` : cell
-    ).join(',')
-  ).join('\n');
-  
+function createCSVResponse(data) {
+  if (data.length === 0) {
+    return ContentService.createTextOutput('')
+      .setMimeType(ContentService.MimeType.CSV);
+  }
+
+  const columnHeaders = Object.keys(data[0]);
+  const csvContent = [
+    columnHeaders.join(','),
+    ...data.map(row => columnHeaders.map(header => row[header]).join(','))
+  ].join('\n');
+
   return ContentService.createTextOutput(csvContent)
-    .setMimeType(ContentService.MimeType.CSV)
-    .setHeaders({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET"
-    });
+    .setMimeType(ContentService.MimeType.CSV);
+}
+
+/**
+ * Crea una respuesta en formato JSON
+ * @param {Object} data - Datos a convertir
+ * @return {TextOutput} Respuesta HTTP
+ */
+function createJSONResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Maneja los errores y crea una respuesta de error
+ * @param {Error} error - Objeto de error
+ * @return {TextOutput} Respuesta HTTP de error
+ */
+function handleError(error) {
+  const errorResponse = {
+    success: false,
+    version: CONFIG.VERSION,
+    timestamp: new Date().toISOString(),
+    error: {
+      code: CONFIG.ERROR_CODES.INVALID_DATA,
+      message: error.message,
+      details: error.toString()
+    }
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(errorResponse))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Configura los headers CORS para la respuesta
+ * @param {TextOutput} output - Objeto de respuesta
+ * @return {TextOutput} Respuesta con headers CORS
+ */
+function setCorsHeaders(output) {
+  const response = output.getResponse();
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'GET');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  return output;
 } 
