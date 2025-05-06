@@ -10,6 +10,15 @@
  * - Retraso configurable entre geocodificaciones
  */
 
+// Verificar que la variable global esté disponible
+if (typeof MapaDinamico === 'undefined') {
+    console.error('La variable global MapaDinamico no está definida');
+    MapaDinamico = {
+        geocodingDelay: 1000,
+        nominatimUrl: 'https://nominatim.openstreetmap.org/search'
+    };
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     // Inicializar mapa
     const container = document.getElementById("mapa-dinamico");
