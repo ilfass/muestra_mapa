@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.0.3
+ * Mapa Dinámico - JS v1.0.5
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -15,7 +15,7 @@
 if (typeof MapaDinamico === 'undefined') {
     console.error('La variable global MapaDinamico no está definida');
     MapaDinamico = {
-        geocodingDelay: 500,
+        geocodingDelay: 1000, // Aumentado para evitar rate limiting
         nominatimUrl: 'https://nominatim.openstreetmap.org/search'
     };
 }
@@ -99,7 +99,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Función para procesar una universidad
                 function processUniversity(university, entry) {
-                    if (!university) return;
+                    if (!university) return Promise.resolve();
+                    
+                    // Limpiar nombre de universidad
+                    university = university.replace(/\n+/g, ' ').trim();
                     
                     // Verificar caché
                     if (coordsCache[university]) {
@@ -109,7 +112,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
                     // Si no está en caché, geocodificar
                     return new Promise(resolve => {
-                        fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`)
+                        setTimeout(() => {
+                            fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`, {
+                                headers: {
+                                    'User-Agent': 'MapaDinamico/1.0'
+                                }
+                            })
                             .then(res => {
                                 if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
                                 return res.json();
@@ -134,6 +142,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 console.error("Error geocodificando:", university, err);
                                 resolve();
                             });
+                        }, MapaDinamico.geocodingDelay);
                     });
                 }
 
@@ -186,12 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const processPromises = rows.map((entry, index) => {
                     const universities = entry["Universidad contraparte"]?.split(/\s*,\s*|\s*y\s*/) || [];
                     return Promise.all(universities.map((univ, i) => 
-                        new Promise(resolve => 
-                            setTimeout(() => 
-                                processUniversity(univ.trim(), entry).then(resolve),
-                                (index * universities.length + i) * MapaDinamico.geocodingDelay
-                            )
-                        )
+                        processUniversity(univ.trim(), entry)
                     ));
                 });
 
