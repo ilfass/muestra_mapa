@@ -1,130 +1,133 @@
-// Configuración global
-const CONFIG = {
-  // Columna que se usará para geocodificación
-  LOCATION_COLUMN_KEYWORDS: ['universidad', 'university', 'institution', 'institución'],
-  
-  // Nombre de la hoja por defecto
-  DEFAULT_SHEET_NAME: 'Hoja 1'
-};
+/**
+ * Script genérico para acceder a datos de Google Sheets
+ * Permite acceder a cualquier sheet mediante parámetros en la URL
+ */
 
-// Función principal que será llamada por la URL web
+/**
+ * Función principal que será llamada por la URL web
+ * Parámetros aceptados:
+ * - sheetId o fileId: ID del Google Sheet
+ * - sheetName o hoja: Nombre de la hoja dentro del sheet
+ * - format: (opcional) Formato de respuesta ('json' o 'csv'). Por defecto es 'json'
+ * - callback: (opcional) Nombre de la función de callback para JSONP
+ */
 function doGet(e) {
   try {
-    // Verificar que e existe y tiene parámetros
-    if (!e || !e.parameter) {
-      throw new Error('No se recibieron parámetros en la solicitud');
+    // Validar parámetros requeridos (aceptar ambos formatos)
+    const sheetId = e.parameter.sheetId || e.parameter.fileId;
+    const sheetName = e.parameter.sheetName || e.parameter.hoja;
+    const format = (e.parameter.format || 'json').toLowerCase();
+    const callback = e.parameter.callback;
+
+    if (!sheetId) {
+      throw new Error('Se requiere el parámetro sheetId o fileId');
+    }
+    if (!sheetName) {
+      throw new Error('Se requiere el parámetro sheetName o hoja');
     }
 
-    // Obtener el ID del archivo y callback
-    const fileId = e.parameter.fileId;
-    const callback = e.parameter.callback;
+    // Intentar abrir el sheet
+    const ss = SpreadsheetApp.openById(sheetId);
+    const sheet = ss.getSheetByName(sheetName);
     
-    // Verificar que se proporcionó el fileId
-    if (!fileId) {
-      throw new Error('Se requiere el parámetro fileId');
+    if (!sheet) {
+      throw new Error(`No se encontró la hoja: ${sheetName}`);
     }
-    
-    // Abrir la hoja y asegurar acceso público
-    const ss = SpreadsheetApp.openById(fileId);
-    const sheet = ss.getActiveSheet();
     
     // Obtener datos
     const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const rows = data.slice(1);
     
-    // Preparar respuesta
-    const response = {
-      success: true,
-      data: data
-    };
+    // Convertir a objetos con nombres de columnas
+    const processedData = rows.map(row => {
+      const obj = {};
+      headers.forEach((header, index) => {
+        obj[header] = row[index];
+      });
+      return obj;
+    });
     
-    // Devolver como JSONP si hay callback, sino como JSON
-    const output = callback ? 
-      `${callback}(${JSON.stringify(response)})` : 
-      JSON.stringify(response);
-      
-    return ContentService.createTextOutput(output)
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    // Preparar respuesta según el formato solicitado
+    if (format === 'csv') {
+      return createCsvResponse(data);
+    } else {
+      return createJsonResponse(processedData, {
+        sheetId,
+        sheetName,
+        timestamp: new Date().toISOString()
+      }, callback);
+    }
       
   } catch (error) {
+    // En caso de error, devolver información detallada
     const errorResponse = {
       success: false,
-      error: error.message || 'Error desconocido'
+      error: error.message,
+      timestamp: new Date().toISOString(),
+      debug: {
+        parameters: e.parameter,
+        errorName: error.name,
+        errorStack: error.stack
+      }
     };
     
-    const output = e && e.parameter && e.parameter.callback ? 
-      `${e.parameter.callback}(${JSON.stringify(errorResponse)})` : 
-      JSON.stringify(errorResponse);
-      
-    return ContentService.createTextOutput(output)
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
-  }
-}
-
-// Procesa los datos de la hoja
-function processSheetData(fileId, sheetName) {
-  const ss = SpreadsheetApp.openById(fileId);
-  const sheet = ss.getSheetByName(sheetName);
-  
-  if (!sheet) {
-    throw new Error(`No se encontró la hoja: ${sheetName}`);
-  }
-
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0].map(header => header.trim().toLowerCase());
-  
-  // Identificar columna de ubicación
-  const locationColumnIndex = findLocationColumn(headers);
-  if (locationColumnIndex === -1) {
-    throw new Error('No se encontró una columna válida para geocodificación');
-  }
-  
-  // Procesar filas y unificar datos divididos
-  const processedData = [];
-  let currentItem = null;
-  
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    
-    // Si la primera columna tiene contenido, es una nueva entrada
-    if (row[0].toString().trim()) {
-      if (currentItem) {
-        processedData.push(currentItem);
-      }
-      
-      // Crear nuevo item
-      currentItem = {};
-      headers.forEach((header, index) => {
-        currentItem[header] = row[index].toString().trim();
+    return ContentService.createTextOutput(JSON.stringify(errorResponse))
+      .setMimeType(ContentService.MimeType.JSON)
+      .setHeaders({
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET"
       });
-    } else if (currentItem) {
-      // Continuar item anterior con datos adicionales
-      headers.forEach((header, index) => {
-        if (row[index].toString().trim()) {
-          currentItem[header] = (currentItem[header] || '') + ' ' + row[index].toString().trim();
-        }
+  }
+}
+
+/**
+ * Crea una respuesta en formato JSON
+ */
+function createJsonResponse(data, metadata, callback) {
+  const response = {
+    success: true,
+    message: "Datos obtenidos correctamente",
+    rowCount: data.length,
+    data: data,
+    ...metadata
+  };
+  
+  const jsonString = JSON.stringify(response);
+  
+  // Si hay callback, envolver en JSONP
+  if (callback) {
+    return ContentService.createTextOutput(`${callback}(${jsonString})`)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT)
+      .setHeaders({
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET"
       });
-    }
   }
   
-  // Agregar último item
-  if (currentItem) {
-    processedData.push(currentItem);
-  }
+  // Si no hay callback, devolver JSON normal
+  return ContentService.createTextOutput(jsonString)
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET"
+    });
+}
+
+/**
+ * Crea una respuesta en formato CSV
+ */
+function createCsvResponse(data) {
+  const csvContent = data.map(row => 
+    row.map(cell => 
+      typeof cell === 'string' ? `"${cell.replace(/"/g, '""')}"` : cell
+    ).join(',')
+  ).join('\n');
   
-  // Filtrar items válidos (deben tener la columna de ubicación)
-  return processedData.filter(item => validateItem(item, headers[locationColumnIndex]));
-}
-
-// Encuentra la columna de ubicación
-function findLocationColumn(headers) {
-  return headers.findIndex(header => 
-    CONFIG.LOCATION_COLUMN_KEYWORDS.some(keyword => 
-      header.includes(keyword.toLowerCase())
-    )
-  );
-}
-
-// Valida que un item tenga la columna de ubicación
-function validateItem(item, locationColumn) {
-  return item[locationColumn] && item[locationColumn].trim() !== '';
+  return ContentService.createTextOutput(csvContent)
+    .setMimeType(ContentService.MimeType.CSV)
+    .setHeaders({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET"
+    });
 } 

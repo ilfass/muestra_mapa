@@ -30,17 +30,25 @@ class DataLoader {
             // Limpiar URL
             sheetUrl = sheetUrl.trim();
 
-            // Extraer fileId y hoja
+            // Extraer parámetros de la URL
             const urlObj = new URL(sheetUrl);
-            const fileId = urlObj.searchParams.get('fileId');
-            const hoja = urlObj.searchParams.get('hoja');
+            const scriptUrl = urlObj.origin + urlObj.pathname;
+            const params = new URLSearchParams(urlObj.search);
 
-            if (!fileId) {
+            // Obtener parámetros necesarios
+            const sheetId = params.get('sheetId') || params.get('fileId');
+            const sheetName = params.get('sheetName') || params.get('hoja');
+
+            if (!sheetId) {
                 throw new Error('ID de archivo no encontrado en la URL');
             }
 
+            if (!sheetName) {
+                throw new Error('Nombre de hoja no encontrado en la URL');
+            }
+
             // Construir URL con JSONP
-            const scriptUrl = `${sheetUrl}&callback=${this.callbackName}`;
+            const finalUrl = `${scriptUrl}?sheetId=${sheetId}&sheetName=${encodeURIComponent(sheetName)}&callback=${this.callbackName}`;
 
             // Crear promesa para JSONP
             return new Promise((resolve, reject) => {
@@ -106,7 +114,7 @@ class DataLoader {
 
                 // Crear y agregar script
                 const script = document.createElement('script');
-                script.src = scriptUrl;
+                script.src = finalUrl;
                 script.onerror = () => {
                     delete window[this.callbackName];
                     if (script && script.parentNode) {
