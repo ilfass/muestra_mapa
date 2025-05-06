@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.0.7
+ * Mapa Dinámico - JS v1.0.8
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -15,14 +15,24 @@
 if (typeof MapaDinamico === 'undefined') {
     console.error('La variable global MapaDinamico no está definida');
     MapaDinamico = {
-        geocodingDelay: 2000, // Aumentado para evitar rate limiting
+        geocodingDelay: 2000,
         nominatimUrl: 'https://nominatim.openstreetmap.org/search',
-        maxRetries: 3, // Número máximo de reintentos
-        chunkSize: 3 // Reducido para mejor manejo
+        maxRetries: 3,
+        chunkSize: 3,
+        debug: true // Activar modo debug
     };
 }
 
+// Función de log condicional
+function debugLog(...args) {
+    if (MapaDinamico.debug) {
+        console.log('[MapaDinamico]', ...args);
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+    debugLog('Iniciando carga del mapa...');
+    
     // Inicializar mapa
     const container = document.getElementById("mapa-dinamico");
     if (!container) {
@@ -36,6 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
+    debugLog('Sheet ID:', sheetId);
+
     // Mostrar indicador de carga
     container.innerHTML = '<div class="loading">Cargando mapa...</div>';
 
@@ -47,11 +59,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Inicializar cluster de marcadores con configuración mejorada
     const markers = L.markerClusterGroup({
-        maxClusterRadius: 20, // Reducido para clusters más pequeños
+        maxClusterRadius: 20,
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: true,
         zoomToBoundsOnClick: true,
-        disableClusteringAtZoom: 6, // Desactivar clustering en zoom cercano
+        disableClusteringAtZoom: 6,
         chunkedLoading: true,
         chunkInterval: 100,
         chunkDelay: 50,
@@ -96,6 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Cargar datos de la hoja usando el endpoint gviz/tq
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+    debugLog('URL del sheet:', sheetUrl);
     
     fetch(sheetUrl)
         .then(res => {
@@ -104,18 +117,25 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .then(text => {
             try {
+                debugLog('Respuesta raw del sheet:', text.substring(0, 200) + '...');
+                
                 const json = JSON.parse(text.substr(47).slice(0, -2));
-                const cols = json.table.cols.map(col => col.label);
+                debugLog('Columnas del sheet:', json.table.cols.map(col => col.label));
+                
                 const rows = json.table.rows.map(row => {
                     const obj = {};
                     row.c.forEach((cell, i) => {
-                        obj[cols[i]] = cleanText(cell?.v || "");
+                        obj[json.table.cols[i].label] = cleanText(cell?.v || "");
                     });
                     return obj;
                 });
 
+                debugLog('Datos procesados:', rows);
+
                 // Llenar select de países
                 const paises = [...new Set(rows.map(row => row["País"]).filter(Boolean))].sort();
+                debugLog('Países encontrados:', paises);
+                
                 const selectPais = document.getElementById("filtro-pais");
                 const buscador = document.getElementById("buscador-mapa");
                 
@@ -135,8 +155,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 function processUniversity(university, entry, retryCount = 0) {
                     if (!university) return Promise.resolve();
                     
+                    debugLog('Procesando universidad:', university);
+                    debugLog('Datos de la entrada:', entry);
+                    
                     // Verificar caché
                     if (coordsCache[university]) {
+                        debugLog('Coordenadas encontradas en caché:', coordsCache[university]);
                         addMarker(coordsCache[university], entry, university);
                         return Promise.resolve();
                     }
@@ -144,7 +168,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     // Si no está en caché, geocodificar
                     return new Promise(resolve => {
                         setTimeout(() => {
-                            fetch(`${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`, {
+                            const searchUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`;
+                            debugLog('Buscando en Nominatim:', searchUrl);
+                            
+                            fetch(searchUrl, {
                                 headers: {
                                     'User-Agent': 'MapaDinamico/1.0'
                                 }
@@ -154,11 +181,15 @@ document.addEventListener("DOMContentLoaded", () => {
                                 return res.json();
                             })
                             .then(data => {
+                                debugLog('Respuesta de Nominatim:', data);
+                                
                                 if (data.length) {
                                     const coords = {
                                         lat: parseFloat(data[0].lat),
                                         lng: parseFloat(data[0].lon)
                                     };
+                                    debugLog('Coordenadas encontradas:', coords);
+                                    
                                     // Guardar en caché
                                     coordsCache[university] = coords;
                                     localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
@@ -172,6 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             .catch(err => {
                                 console.error("Error geocodificando:", university, err);
                                 if (retryCount < MapaDinamico.maxRetries) {
+                                    debugLog(`Reintentando (${retryCount + 1}/${MapaDinamico.maxRetries})...`);
                                     // Reintentar con un delay exponencial
                                     setTimeout(() => {
                                         processUniversity(university, entry, retryCount + 1)
@@ -187,6 +219,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Función para añadir marcador con popup
                 function addMarker(coords, entry, university) {
+                    debugLog('Añadiendo marcador:', { coords, university });
+                    
                     const popupContent = `
                         <div class="info">
                             <h4>${university}</h4>
@@ -211,10 +245,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Función para actualizar marcadores según filtros
                 function updateMarkers() {
-                    if (isLoading) return; // No actualizar mientras carga
+                    if (isLoading) return;
                     
                     const paisSeleccionado = selectPais.value;
                     const busqueda = cleanText(buscador.value);
+                    
+                    debugLog('Actualizando marcadores:', { paisSeleccionado, busqueda });
                     
                     markers.clearLayers();
                     
@@ -242,18 +278,22 @@ document.addEventListener("DOMContentLoaded", () => {
                     chunks.push(rows.slice(i, i + MapaDinamico.chunkSize));
                 }
 
+                debugLog('Total de chunks a procesar:', chunks.length);
+
                 let processedChunks = 0;
                 function processNextChunk() {
                     if (processedChunks >= chunks.length) {
-                        console.log("Todas las geocodificaciones completadas");
+                        debugLog("Todas las geocodificaciones completadas");
                         updateLoadingState(false);
-                        updateMarkers(); // Actualizar marcadores al terminar
+                        updateMarkers();
                         return;
                     }
 
+                    debugLog(`Procesando chunk ${processedChunks + 1}/${chunks.length}`);
                     const chunk = chunks[processedChunks];
                     const promises = chunk.map(entry => {
                         const universities = entry["Universidad contraparte"]?.split(/\s*,\s*|\s*y\s*/) || [];
+                        debugLog('Universidades en chunk:', universities);
                         return Promise.all(universities.map(univ => 
                             processUniversity(univ.trim(), entry)
                         ));
