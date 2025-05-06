@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.1.0
+ * Mapa Dinámico - JS v1.2.1
  * 
  * Características:
  * - Carga datos desde Google Sheets usando el endpoint gviz/tq
@@ -11,6 +11,9 @@
  * - Detección automática del campo a geocodificar
  * - Separación robusta de múltiples valores
  * - Logs detallados para depuración
+ * - Fallback: si no encuentra la universidad, ubica en el país
+ * - Color distinto para cada país
+ * - Limpieza automática de caché al cargar
  */
 
 // Verificar que la variable global esté disponible
@@ -32,8 +35,33 @@ function debugLog(...args) {
     }
 }
 
+// Generar color único por país
+function colorFromString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    let color = '#';
+    for (let i = 0; i < 3; i++) {
+        let value = (hash >> (i * 8)) & 0xFF;
+        color += ('00' + value.toString(16)).substr(-2);
+    }
+    return color;
+}
+
+// Crear icono de Leaflet con color
+function createColoredIcon(color) {
+    return L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px #000;display:flex;align-items:center;justify-content:center;"><span style='display:none'></span></div>`
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     debugLog('Iniciando carga del mapa...');
+    // Limpiar caché de coordenadas para depuración
+    localStorage.removeItem('coordsCache');
+    debugLog('Caché de coordenadas limpiado');
     
     // Inicializar mapa
     const container = document.getElementById("mapa-dinamico");
@@ -85,9 +113,10 @@ document.addEventListener("DOMContentLoaded", () => {
     map.addLayer(markers);
 
     // Cache de coordenadas desde localStorage
-    const coordsCache = JSON.parse(localStorage.getItem('coordsCache') || '{}');
+    const coordsCache = {};
     let allMarkers = [];
     let isLoading = true;
+    let paisColorMap = {};
 
     // Función para limpiar texto
     function cleanText(text) {
@@ -163,6 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 paises.forEach(pais => {
+                    paisColorMap[pais] = colorFromString(pais);
                     const option = document.createElement("option");
                     option.value = pais;
                     option.textContent = pais;
@@ -170,20 +200,24 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
 
                 // Función para procesar una universidad con reintentos
-                function processUniversity(university, entry, retryCount = 0) {
-                    if (!university) return Promise.resolve();
-                    
+                function processUniversity(university, entry, retryCount = 0, triedCountry = false) {
+                    if (!university) {
+                        // Si el campo está vacío, intentar con el país
+                        const pais = entry["País"] || entry["pais"];
+                        if (pais && !triedCountry) {
+                            debugLog('Campo vacío, intentando con país:', pais);
+                            return processUniversity(pais, entry, 0, true);
+                        } else {
+                            debugLog('Fila ignorada por estar vacía:', entry);
+                            return Promise.resolve();
+                        }
+                    }
                     debugLog('Procesando para geocodificar:', { campo: geoField, valor: university, entry });
-                    debugLog('Datos de la entrada:', entry);
-                    
-                    // Verificar caché
                     if (coordsCache[university]) {
                         debugLog('Coordenadas encontradas en caché:', coordsCache[university]);
                         addMarker(coordsCache[university], entry, university);
                         return Promise.resolve();
                     }
-
-                    // Si no está en caché, geocodificar
                     return new Promise(resolve => {
                         setTimeout(() => {
                             const searchUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`;
@@ -213,6 +247,16 @@ document.addEventListener("DOMContentLoaded", () => {
                                     localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
                                     // Añadir marcador
                                     addMarker(coords, entry, university);
+                                } else if (!triedCountry) {
+                                    // Fallback: intentar con el país
+                                    const pais = entry["País"] || entry["pais"];
+                                    if (pais) {
+                                        debugLog('No se encontró universidad, intentando con país:', pais);
+                                        processUniversity(pais, entry, 0, true).then(resolve);
+                                        return;
+                                    } else {
+                                        console.warn("No se encontró ubicación ni universidad ni país para:", entry);
+                                    }
                                 } else {
                                     console.warn("No se encontró ubicación para:", university);
                                 }
@@ -224,9 +268,19 @@ document.addEventListener("DOMContentLoaded", () => {
                                     debugLog(`Reintentando (${retryCount + 1}/${MapaDinamico.maxRetries})...`);
                                     // Reintentar con un delay exponencial
                                     setTimeout(() => {
-                                        processUniversity(university, entry, retryCount + 1)
+                                        processUniversity(university, entry, retryCount + 1, triedCountry)
                                             .then(resolve);
                                     }, Math.pow(2, retryCount) * MapaDinamico.geocodingDelay);
+                                } else if (!triedCountry) {
+                                    // Fallback: intentar con el país
+                                    const pais = entry["País"] || entry["pais"];
+                                    if (pais) {
+                                        debugLog('Error, intentando con país:', pais);
+                                        processUniversity(pais, entry, 0, true).then(resolve);
+                                        return;
+                                    } else {
+                                        resolve();
+                                    }
                                 } else {
                                     resolve();
                                 }
@@ -237,7 +291,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Función para añadir marcador con popup
                 function addMarker(coords, entry, university) {
-                    debugLog('Añadiendo marcador:', { coords, university });
+                    const pais = entry["País"] || entry["pais"] || 'Otro';
+                    const color = paisColorMap[pais] || '#888';
+                    debugLog('Añadiendo marcador:', { coords, university, color });
                     
                     const popupContent = `
                         <div class="info">
@@ -249,13 +305,13 @@ document.addEventListener("DOMContentLoaded", () => {
                         </div>
                     `;
                     
-                    const marker = L.marker([coords.lat, coords.lng])
+                    const marker = L.marker([coords.lat, coords.lng], { icon: createColoredIcon(color) })
                         .bindPopup(popupContent);
                     
                     allMarkers.push({
                         marker,
                         entry,
-                        searchText: `${university} ${(entry["País"] || entry["pais"] || "")}`.toLowerCase()
+                        searchText: Object.values(entry).join(' ').toLowerCase()
                     });
                     
                     markers.addLayer(marker);
@@ -313,6 +369,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         // Separar múltiples valores por coma, salto de línea, punto y coma, barra, y, etc.
                         let raw = entry[geoField] || '';
                         let universities = raw.split(/,|;|\n|\||\/| y | Y |\s{2,}/).map(u => cleanText(u)).filter(Boolean);
+                        if (universities.length === 0) {
+                            debugLog('Fila sin datos para geocodificar, se intentará con país:', entry);
+                            universities = ['']; // Forzar fallback a país
+                        }
                         debugLog('Valores a geocodificar en esta fila:', universities);
                         return Promise.all(universities.map(univ => 
                             processUniversity(univ, entry)
