@@ -1,11 +1,10 @@
 /**
- * Mapa Dinámico - JS v1.3.0
+ * Mapa Dinámico - JS v1.4.0
  * 
  * Características:
- * - Prioriza columnas latitud/longitud (ignorando mayúsculas/minúsculas)
- * - Si no hay coordenadas, intenta con dirección/universidad
- * - Si tampoco, intenta con el país
- * - Solo muestra puntos si hay coordenadas válidas
+ * - Prioriza enlaces de OpenStreetMap
+ * - Luego usa columnas latitud/longitud
+ * - Si dice NO ENCONTRADO, usa el país
  * - Color distinto para cada país
  * - Logs detallados para depuración
  */
@@ -49,6 +48,24 @@ function createColoredIcon(color) {
         className: 'custom-marker',
         html: `<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px #000;display:flex;align-items:center;justify-content:center;"><span style='display:none'></span></div>`
     });
+}
+
+function extractCoordsFromOSMUrl(url) {
+    if (!url) return null;
+    try {
+        // Intentar extraer coordenadas de URL de OpenStreetMap
+        const match = url.match(/[?&]mlat=(-?\d+\.\d+)&mlon=(-?\d+\.\d+)/);
+        if (match) {
+            return {
+                lat: parseFloat(match[1]),
+                lng: parseFloat(match[2])
+            };
+        }
+        return null;
+    } catch (e) {
+        debugLog('Error extrayendo coordenadas de URL:', e);
+        return null;
+    }
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -164,9 +181,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 const cols = json.table.cols.map(col => col.label);
                 debugLog('Columnas del sheet:', cols);
                 // Detectar columnas de lat/lng ignorando mayúsculas/minúsculas
+                const osmLinkCol = getColNameInsensitive(cols, 'Enlace a OpenStreetMap');
                 const latCol = getColNameInsensitive(cols, 'latitud') || getColNameInsensitive(cols, 'latitude');
                 const lngCol = getColNameInsensitive(cols, 'longitud') || getColNameInsensitive(cols, 'longitude');
-                debugLog('Columna latitud:', latCol, 'Columna longitud:', lngCol);
+                const paisCol = getColNameInsensitive(cols, 'país') || getColNameInsensitive(cols, 'pais');
+                debugLog('Columnas detectadas:', {
+                    osmLink: osmLinkCol,
+                    lat: latCol,
+                    lng: lngCol,
+                    pais: paisCol
+                });
                 const geoField = getGeoFieldName(cols);
                 debugLog('Campo a geocodificar detectado:', geoField);
                 
@@ -181,7 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 debugLog('Datos procesados:', rows);
 
                 // Llenar select de países
-                const paises = [...new Set(rows.map(row => row["País"] || row["pais"]).filter(Boolean))].sort();
+                const paises = [...new Set(rows.map(row => row[paisCol]).filter(Boolean))].sort();
                 debugLog('Países encontrados:', paises);
                 
                 const selectPais = document.getElementById("filtro-pais");
@@ -204,7 +228,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 function processUniversity(university, entry, retryCount = 0, triedCountry = false) {
                     if (!university) {
                         // Si el campo está vacío, intentar con el país
-                        const pais = entry["País"] || entry["pais"];
+                        const pais = entry[paisCol] || entry[paisCol.toLowerCase()];
                         if (pais && !triedCountry) {
                             debugLog('Campo vacío, intentando con país:', pais);
                             return processUniversity(pais, entry, 0, true);
@@ -250,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                     addMarker(coords, entry, university);
                                 } else if (!triedCountry) {
                                     // Fallback: intentar con el país
-                                    const pais = entry["País"] || entry["pais"];
+                                    const pais = entry[paisCol] || entry[paisCol.toLowerCase()];
                                     if (pais) {
                                         debugLog('No se encontró universidad, intentando con país:', pais);
                                         processUniversity(pais, entry, 0, true).then(resolve);
@@ -274,7 +298,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                     }, Math.pow(2, retryCount) * MapaDinamico.geocodingDelay);
                                 } else if (!triedCountry) {
                                     // Fallback: intentar con el país
-                                    const pais = entry["País"] || entry["pais"];
+                                    const pais = entry[paisCol] || entry[paisCol.toLowerCase()];
                                     if (pais) {
                                         debugLog('Error, intentando con país:', pais);
                                         processUniversity(pais, entry, 0, true).then(resolve);
@@ -292,7 +316,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 // Función para añadir marcador con popup
                 function addMarker(coords, entry, university) {
-                    const pais = entry["País"] || entry["pais"] || 'Otro';
+                    const pais = entry[paisCol] || entry[paisCol.toLowerCase()] || 'Otro';
                     const color = paisColorMap[pais] || '#888';
                     debugLog('Añadiendo marcador:', { coords, university, color });
                     
@@ -330,7 +354,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     markers.clearLayers();
                     
                     allMarkers.forEach(({ marker, entry, searchText }) => {
-                        const matchPais = !paisSeleccionado || (entry["País"] || entry["pais"]) === paisSeleccionado;
+                        const matchPais = !paisSeleccionado || (entry[paisCol] || entry[paisCol.toLowerCase()]) === paisSeleccionado;
                         const matchBusqueda = !busqueda || searchText.includes(busqueda);
                         
                         if (matchPais && matchBusqueda) {
