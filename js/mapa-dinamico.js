@@ -1,452 +1,150 @@
 /**
- * Mapa Dinámico - JS v1.4.0
+ * Mapa Dinámico - JS v1.4.2
+ * Fecha: 2025-05-07
  * 
- * Características:
- * - Prioriza enlaces de OpenStreetMap
- * - Luego usa columnas latitud/longitud
- * - Si dice NO ENCONTRADO, usa el país
- * - Color distinto para cada país
- * - Logs detallados para depuración
+ * - Compatible con cualquier Google Sheet público
+ * - Geocodificación con Nominatim (OpenStreetMap)
+ * - Prioriza URL OSM > Lat/Lng > País
+ * - Marca con color por país
+ * - Control de errores y debug activable
  */
 
-// Verificar que la variable global esté disponible
 if (typeof MapaDinamico === 'undefined') {
-    console.error('La variable global MapaDinamico no está definida');
-    MapaDinamico = {
-        geocodingDelay: 2000,
-        nominatimUrl: 'https://nominatim.openstreetmap.org/search',
-        maxRetries: 3,
-        chunkSize: 3,
-        debug: true // Activar modo debug
-    };
+  console.warn("MapaDinamico config no encontrada. Se define por defecto.");
+  var MapaDinamico = {
+    geocodingDelay: 1500,
+    nominatimUrl: 'https://nominatim.openstreetmap.org/search',
+    maxRetries: 3,
+    chunkSize: 3,
+    debug: true
+  };
 }
 
-// Función de log condicional
 function debugLog(...args) {
-    if (MapaDinamico.debug) {
-        console.log('[MapaDinamico]', ...args);
-    }
+  if (MapaDinamico.debug) console.log('[MapaDinamico]', ...args);
 }
 
-// Generar color único por país
 function colorFromString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    let color = '#';
-    for (let i = 0; i < 3; i++) {
-        let value = (hash >> (i * 8)) & 0xFF;
-        color += ('00' + value.toString(16)).substr(-2);
-    }
-    return color;
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  let color = '#';
+  for (let i = 0; i < 3; i++) {
+    let value = (hash >> (i * 8)) & 0xFF;
+    color += ('00' + value.toString(16)).substr(-2);
+  }
+  return color;
 }
 
-// Crear icono de Leaflet con color
 function createColoredIcon(color) {
-    return L.divIcon({
-        className: 'custom-marker',
-        html: `<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px #000;display:flex;align-items:center;justify-content:center;"><span style='display:none'></span></div>`
-    });
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px #000;"></div>`
+  });
 }
 
 function extractCoordsFromOSMUrl(url) {
-    if (!url) return null;
-    try {
-        // Intentar extraer coordenadas de URL de OpenStreetMap
-        const match = url.match(/[?&]mlat=(-?\d+\.\d+)&mlon=(-?\d+\.\d+)/);
-        if (match) {
-            return {
-                lat: parseFloat(match[1]),
-                lng: parseFloat(match[2])
-            };
-        }
-        return null;
-    } catch (e) {
-        debugLog('Error extrayendo coordenadas de URL:', e);
-        return null;
-    }
+  if (!url) return null;
+  const match = url.match(/[?&]mlat=(-?\d+\.\d+)&mlon=(-?\d+\.\d+)/);
+  if (match) return [parseFloat(match[1]), parseFloat(match[2])];
+  return null;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    debugLog('Iniciando carga del mapa...');
-    // Limpiar caché de coordenadas para depuración
-    localStorage.removeItem('coordsCache');
-    debugLog('Caché de coordenadas limpiado');
-    
-    // Inicializar mapa
-    const container = document.getElementById("mapa-dinamico");
-    if (!container) {
-        console.warn("No se encontró el contenedor del mapa");
-        return;
+async function geocodeAddress(query, retries = 0) {
+  const url = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(query)}&format=json&limit=1`;
+  debugLog('🔍 Geocodificando:', query);
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.length > 0) {
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    } else {
+      return null;
     }
-
-    const sheetId = container.dataset.sheetId;
-    if (!sheetId) {
-        container.innerHTML = "<p style='color:red;'>⚠️ Falta el ID de la hoja de cálculo</p>";
-        return;
+  } catch (err) {
+    if (retries < MapaDinamico.maxRetries) {
+      debugLog(`⚠️ Reintentando geocodificación: ${query}`);
+      return new Promise(resolve => setTimeout(() => resolve(geocodeAddress(query, retries + 1)), 1000));
+    } else {
+      console.error('❌ Falló la geocodificación:', query, err);
+      return null;
     }
+  }
+}
 
-    debugLog('Sheet ID:', sheetId);
+function cleanText(text) {
+    console.log('cleanText recibe:', text, 'tipo:', typeof text);
+    if (text === null || text === undefined) return '';
+    if (typeof text !== 'string') {
+        try {
+            text = String(text);
+        } catch (e) {
+            console.warn('No se pudo convertir a string:', text, e);
+            return '';
+        }
+    }
+    return text
+        .replace(/\n+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
 
-    // Mostrar indicador de carga
-    container.innerHTML = '<div class="loading">Cargando mapa...</div>';
+document.addEventListener("DOMContentLoaded", async () => {
+  const container = document.querySelector("#mapa-dinamico-container");
+  if (!container) return console.error("⚠️ No se encontró el contenedor del mapa");
 
-    // Inicializar mapa con vista mundial
-    const map = L.map(container).setView([0, 0], 2);
+  const sheetId = container.dataset.sheetId;
+  if (!sheetId) return console.error("⚠️ Falta el atributo data-sheet-id");
+
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+
+  try {
+    const response = await fetch(url);
+    const text = await response.text();
+    const rawJson = text.substring(47).slice(0, -2);
+    const parsed = JSON.parse(rawJson);
+
+    const cols = parsed.table.cols.map(c => c.label.trim());
+    const rows = parsed.table.rows.map(r => {
+      const obj = {};
+      r.c.forEach((cell, i) => {
+        obj[cols[i]] = cleanText(cell?.v ?? '');
+      });
+      return obj;
+    });
+
+    const map = L.map("mapa-dinamico-container").setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap contributors"
+      attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    // Inicializar cluster de marcadores con configuración mejorada
-    const markers = L.markerClusterGroup({
-        maxClusterRadius: 20,
-        spiderfyOnMaxZoom: true,
-        showCoverageOnHover: true,
-        zoomToBoundsOnClick: true,
-        disableClusteringAtZoom: 6,
-        chunkedLoading: true,
-        chunkInterval: 100,
-        chunkDelay: 50,
-        iconCreateFunction: function(cluster) {
-            const count = cluster.getChildCount();
-            let size = 'small';
-            if (count > 100) size = 'large';
-            else if (count > 10) size = 'medium';
-            
-            return L.divIcon({
-                html: `<div class="cluster-count ${size}">${count}</div>`,
-                className: 'marker-cluster',
-                iconSize: L.point(40, 40)
-            });
-        }
-    });
-    map.addLayer(markers);
+    for (let row of rows) {
+      let name = row["Universidad Contraparte"] || row["Nombre"] || "Sin nombre";
+      let osmUrl = row["Web"] || row["Mapa"];
+      let coords = extractCoordsFromOSMUrl(osmUrl);
 
-    // Cache de coordenadas desde localStorage
-    const coordsCache = {};
-    let allMarkers = [];
-    let isLoading = true;
-    let paisColorMap = {};
+      if (!coords && row["Latitud"] && row["Longitud"]) {
+        coords = [parseFloat(row["Latitud"]), parseFloat(row["Longitud"])];
+      }
 
-    // Función para limpiar texto
-    function cleanText(text) {
-        debugLog('cleanText recibió:', text, 'tipo:', typeof text);
-        if (text === null || text === undefined) return '';
-        // Convertir a string si no lo es
-        if (typeof text !== 'string') {
-            debugLog('Convirtiendo a string:', text);
-            text = String(text);
-        }
-        return text
-            .replace(/\n+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
+      if (!coords) {
+        coords = await geocodeAddress(name || row["País"]);
+        await new Promise(resolve => setTimeout(resolve, MapaDinamico.geocodingDelay));
+      }
+
+      if (coords) {
+        const color = colorFromString(row["País"] || "");
+        L.marker(coords, { icon: createColoredIcon(color) })
+          .addTo(map)
+          .bindPopup(`<strong>${name}</strong><br>${row["País"] || ""}`);
+      } else {
+        debugLog(`❌ No se pudo geolocalizar:`, name);
+      }
     }
 
-    // Función para actualizar el estado de carga
-    function updateLoadingState(loading) {
-        isLoading = loading;
-        const loadingEl = document.querySelector('.loading');
-        if (loadingEl) {
-            loadingEl.style.display = loading ? 'block' : 'none';
-        }
-    }
-
-    // Detección genérica del campo a geocodificar
-    function getColNameInsensitive(cols, name) {
-        return cols.find(c => c && c.toLowerCase() === name.toLowerCase());
-    }
-
-    function getGeoFieldName(cols) {
-        const posibles = [
-            'universidad contraparte', 'universidad', 'dirección', 'direccion', 'ubicacion', 'ubicación', 'partner', 'institución', 'institucion', 'address', 'location'
-        ];
-        for (let posible of posibles) {
-            const col = cols.find(c => c && c.toLowerCase().includes(posible));
-            if (col) return col;
-        }
-        return cols.find(c => !/año|pais|país|nombre|facultad|equipo|ods|resumen|latitud|longitud|latitude|longitude/i.test(c)) || cols[0];
-    }
-
-    // Cargar datos de la hoja usando el endpoint gviz/tq
-    const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
-    debugLog('URL del sheet:', sheetUrl);
-    
-    fetch(sheetUrl)
-        .then(res => {
-            if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-            return res.text();
-        })
-        .then(text => {
-            try {
-                debugLog('Respuesta raw del sheet:', text.substring(0, 200) + '...');
-                
-                const json = JSON.parse(text.substr(47).slice(0, -2));
-                const cols = json.table.cols.map(col => col.label);
-                debugLog('Columnas del sheet:', cols);
-                // Detectar columnas de lat/lng ignorando mayúsculas/minúsculas
-                const osmLinkCol = getColNameInsensitive(cols, 'Enlace a OpenStreetMap');
-                const latCol = getColNameInsensitive(cols, 'latitud') || getColNameInsensitive(cols, 'latitude');
-                const lngCol = getColNameInsensitive(cols, 'longitud') || getColNameInsensitive(cols, 'longitude');
-                const paisCol = getColNameInsensitive(cols, 'país') || getColNameInsensitive(cols, 'pais');
-                debugLog('Columnas detectadas:', {
-                    osmLink: osmLinkCol,
-                    lat: latCol,
-                    lng: lngCol,
-                    pais: paisCol
-                });
-                const geoField = getGeoFieldName(cols);
-                debugLog('Campo a geocodificar detectado:', geoField);
-                
-                const rows = json.table.rows.map(row => {
-                    const obj = {};
-                    row.c.forEach((cell, i) => {
-                        debugLog('Procesando celda:', { col: cols[i], cell });
-                        // Asegurarse de que el valor sea string
-                        const value = cell?.v;
-                        debugLog('Valor de celda:', { value, type: typeof value });
-                        obj[cols[i]] = cleanText(value);
-                    });
-                    return obj;
-                });
-
-                debugLog('Datos procesados:', rows);
-
-                // Llenar select de países
-                const paises = [...new Set(rows.map(row => row[paisCol]).filter(Boolean))].sort();
-                debugLog('Países encontrados:', paises);
-                
-                const selectPais = document.getElementById("filtro-pais");
-                const buscador = document.getElementById("buscador-mapa");
-                
-                if (!selectPais || !buscador) {
-                    console.warn("No se encontraron los elementos de filtrado");
-                    return;
-                }
-
-                paises.forEach(pais => {
-                    paisColorMap[pais] = colorFromString(pais);
-                    const option = document.createElement("option");
-                    option.value = pais;
-                    option.textContent = pais;
-                    selectPais.appendChild(option);
-                });
-
-                // Función para procesar una universidad con reintentos
-                function processUniversity(university, entry, retryCount = 0, triedCountry = false) {
-                    if (!university) {
-                        // Si el campo está vacío, intentar con el país
-                        const pais = entry[paisCol] || entry[paisCol.toLowerCase()];
-                        if (pais && !triedCountry) {
-                            debugLog('Campo vacío, intentando con país:', pais);
-                            return processUniversity(pais, entry, 0, true);
-                        } else {
-                            debugLog('Fila ignorada por estar vacía:', entry);
-                            return Promise.resolve();
-                        }
-                    }
-                    debugLog('Procesando para geocodificar:', { campo: geoField, valor: university, entry });
-                    if (coordsCache[university]) {
-                        debugLog('Coordenadas encontradas en caché:', coordsCache[university]);
-                        addMarker(coordsCache[university], entry, university);
-                        return Promise.resolve();
-                    }
-                    return new Promise(resolve => {
-                        setTimeout(() => {
-                            const searchUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(university)}&format=json&limit=1`;
-                            debugLog('Buscando en Nominatim:', searchUrl);
-                            
-                            fetch(searchUrl, {
-                                headers: {
-                                    'User-Agent': 'MapaDinamico/1.0'
-                                }
-                            })
-                            .then(res => {
-                                if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
-                                return res.json();
-                            })
-                            .then(data => {
-                                debugLog('Respuesta de Nominatim:', data);
-                                
-                                if (data.length) {
-                                    const coords = {
-                                        lat: parseFloat(data[0].lat),
-                                        lng: parseFloat(data[0].lon)
-                                    };
-                                    debugLog('Coordenadas encontradas:', coords);
-                                    
-                                    // Guardar en caché
-                                    coordsCache[university] = coords;
-                                    localStorage.setItem('coordsCache', JSON.stringify(coordsCache));
-                                    // Añadir marcador
-                                    addMarker(coords, entry, university);
-                                } else if (!triedCountry) {
-                                    // Fallback: intentar con el país
-                                    const pais = entry[paisCol] || entry[paisCol.toLowerCase()];
-                                    if (pais) {
-                                        debugLog('No se encontró universidad, intentando con país:', pais);
-                                        processUniversity(pais, entry, 0, true).then(resolve);
-                                        return;
-                                    } else {
-                                        console.warn("No se encontró ubicación ni universidad ni país para:", entry);
-                                    }
-                                } else {
-                                    console.warn("No se encontró ubicación para:", university);
-                                }
-                                resolve();
-                            })
-                            .catch(err => {
-                                console.error("Error geocodificando:", university, err);
-                                if (retryCount < MapaDinamico.maxRetries) {
-                                    debugLog(`Reintentando (${retryCount + 1}/${MapaDinamico.maxRetries})...`);
-                                    // Reintentar con un delay exponencial
-                                    setTimeout(() => {
-                                        processUniversity(university, entry, retryCount + 1, triedCountry)
-                                            .then(resolve);
-                                    }, Math.pow(2, retryCount) * MapaDinamico.geocodingDelay);
-                                } else if (!triedCountry) {
-                                    // Fallback: intentar con el país
-                                    const pais = entry[paisCol] || entry[paisCol.toLowerCase()];
-                                    if (pais) {
-                                        debugLog('Error, intentando con país:', pais);
-                                        processUniversity(pais, entry, 0, true).then(resolve);
-                                        return;
-                                    } else {
-                                        resolve();
-                                    }
-                                } else {
-                                    resolve();
-                                }
-                            });
-                        }, MapaDinamico.geocodingDelay);
-                    });
-                }
-
-                // Función para añadir marcador con popup
-                function addMarker(coords, entry, university) {
-                    const pais = entry[paisCol] || entry[paisCol.toLowerCase()] || 'Otro';
-                    const color = paisColorMap[pais] || '#888';
-                    debugLog('Añadiendo marcador:', { coords, university, color });
-                    
-                    const popupContent = `
-                        <div class="info">
-                            <h4>${university}</h4>
-                            ${Object.entries(entry)
-                                .filter(([key, val]) => 
-                                    val && 
-                                    key !== geoField && 
-                                    key !== "Nombre" &&
-                                    !key.toLowerCase().includes('latitud') &&
-                                    !key.toLowerCase().includes('longitud') &&
-                                    !key.toLowerCase().includes('enlace a openstreetmap')
-                                )
-                                .map(([key, val]) => `<strong>${key}:</strong> ${val}`)
-                                .join("<br>")}
-                        </div>
-                    `;
-                    
-                    const marker = L.marker([coords.lat, coords.lng], { icon: createColoredIcon(color) })
-                        .bindPopup(popupContent);
-                    
-                    allMarkers.push({
-                        marker,
-                        entry,
-                        searchText: Object.values(entry).join(' ').toLowerCase()
-                    });
-                    
-                    markers.addLayer(marker);
-                }
-
-                // Función para actualizar marcadores según filtros
-                function updateMarkers() {
-                    if (isLoading) return;
-                    
-                    const paisSeleccionado = selectPais.value;
-                    const busqueda = buscador.value.trim().toLowerCase();
-                    
-                    debugLog('Actualizando marcadores:', { paisSeleccionado, busqueda });
-                    
-                    markers.clearLayers();
-                    
-                    allMarkers.forEach(({ marker, entry, searchText }) => {
-                        const matchPais = !paisSeleccionado || (entry[paisCol] || entry[paisCol.toLowerCase()]) === paisSeleccionado;
-                        const matchBusqueda = !busqueda || searchText.includes(busqueda);
-                        
-                        if (matchPais && matchBusqueda) {
-                            markers.addLayer(marker);
-                        }
-                    });
-                }
-
-                // Eventos de cambio en los filtros con debounce
-                let searchTimeout;
-                selectPais.addEventListener("change", updateMarkers);
-                buscador.addEventListener("input", () => {
-                    clearTimeout(searchTimeout);
-                    searchTimeout = setTimeout(updateMarkers, 300);
-                });
-
-                // Procesar cada entrada en chunks
-                const chunks = [];
-                for (let i = 0; i < rows.length; i += MapaDinamico.chunkSize) {
-                    chunks.push(rows.slice(i, i + MapaDinamico.chunkSize));
-                }
-
-                debugLog('Total de chunks a procesar:', chunks.length);
-
-                let processedChunks = 0;
-                function processNextChunk() {
-                    if (processedChunks >= chunks.length) {
-                        debugLog("Todas las geocodificaciones completadas");
-                        updateLoadingState(false);
-                        updateMarkers();
-                        return;
-                    }
-
-                    debugLog(`Procesando chunk ${processedChunks + 1}/${chunks.length}`);
-                    const chunk = chunks[processedChunks];
-                    const promises = chunk.map(entry => {
-                        // Separar múltiples valores por coma, salto de línea, punto y coma, barra, y, etc.
-                        let raw = entry[geoField] || '';
-                        let universities = raw.split(/,|;|\n|\||\/| y | Y |\s{2,}/).map(u => cleanText(u)).filter(Boolean);
-                        if (universities.length === 0) {
-                            debugLog('Fila sin datos para geocodificar, se intentará con país:', entry);
-                            universities = ['']; // Forzar fallback a país
-                        }
-                        debugLog('Valores a geocodificar en esta fila:', universities);
-                        return Promise.all(universities.map(univ => 
-                            processUniversity(univ, entry)
-                        ));
-                    });
-
-                    Promise.all(promises)
-                        .then(() => {
-                            processedChunks++;
-                            processNextChunk();
-                        })
-                        .catch(err => {
-                            console.error("Error procesando chunk:", err);
-                            processedChunks++;
-                            processNextChunk();
-                        });
-                }
-
-                // Iniciar procesamiento
-                processNextChunk();
-
-            } catch (err) {
-                throw new Error(`Error procesando datos: ${err.message}`);
-            }
-        })
-        .catch(err => {
-            console.error("Error al procesar el sheet:", err);
-            container.innerHTML = `
-                <p style='color:red;'>
-                    Error al cargar los datos del mapa.<br>
-                    Detalles: ${err.message}
-                </p>`;
-            updateLoadingState(false);
-        });
+  } catch (err) {
+    console.error("❌ Error al procesar el sheet:", err);
+  }
 }); 
