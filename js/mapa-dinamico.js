@@ -324,7 +324,14 @@ document.addEventListener("DOMContentLoaded", () => {
                         <div class="info">
                             <h4>${university}</h4>
                             ${Object.entries(entry)
-                                .filter(([key, val]) => val && key !== geoField && key !== "Nombre")
+                                .filter(([key, val]) => 
+                                    val && 
+                                    key !== geoField && 
+                                    key !== "Nombre" &&
+                                    !key.toLowerCase().includes('latitud') &&
+                                    !key.toLowerCase().includes('longitud') &&
+                                    !key.toLowerCase().includes('enlace a openstreetmap')
+                                )
                                 .map(([key, val]) => `<strong>${key}:</strong> ${val}`)
                                 .join("<br>")}
                         </div>
