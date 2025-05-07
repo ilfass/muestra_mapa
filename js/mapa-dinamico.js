@@ -132,6 +132,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Función para limpiar texto
     function cleanText(text) {
         if (!text) return '';
+        // Convertir a string si no lo es
+        if (typeof text !== 'string') {
+            text = String(text);
+        }
         return text
             .replace(/\n+/g, ' ')
             .replace(/\s+/g, ' ')
@@ -197,7 +201,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 const rows = json.table.rows.map(row => {
                     const obj = {};
                     row.c.forEach((cell, i) => {
-                        obj[cols[i]] = cleanText(cell?.v || "");
+                        // Asegurarse de que el valor sea string
+                        const value = cell?.v;
+                        obj[cols[i]] = cleanText(value);
                     });
                     return obj;
                 });
