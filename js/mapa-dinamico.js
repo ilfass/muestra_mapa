@@ -144,7 +144,12 @@ function iniciarObserver() {
     const target = document.body;
     if (!target) {
         // Esperar a que el DOM esté listo
-        document.addEventListener('DOMContentLoaded', iniciarObserver);
+        if (document.readyState === "loading") {
+            document.addEventListener('DOMContentLoaded', iniciarObserver);
+        } else {
+            // Si el DOM ya está interactivo/completo, reintentar
+            setTimeout(iniciarObserver, 50);
+        }
         return;
     }
     const observer = new MutationObserver(() => {
