@@ -73,24 +73,6 @@ async function geocodeAddress(query, retries = 0) {
   }
 }
 
-function cleanText(text) {
-    console.log('cleanText recibe:', text, 'tipo:', typeof text);
-    if (text === null || text === undefined) return '';
-    if (typeof text !== 'string') {
-        try {
-            text = String(text);
-        } catch (e) {
-            console.warn('No se pudo convertir a string:', text, e);
-            return '';
-        }
-    }
-    return text
-        .replace(/\n+/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-}
-
 function iniciarMapaDinamico() {
     const container = document.getElementById("mapa-dinamico-container");
     if (!container) return;
