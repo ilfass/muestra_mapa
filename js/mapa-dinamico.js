@@ -140,16 +140,25 @@ function iniciarMapaDinamico() {
       .catch(err => console.error(err));
 }
 
-// Si el div ya existe, ejecuta directamente
-if (document.getElementById("mapa-dinamico-container")) {
-    iniciarMapaDinamico();
-} else {
-    // Si no, espera a que aparezca en el DOM
+function iniciarObserver() {
+    const target = document.body;
+    if (!target) {
+        // Esperar a que el DOM esté listo
+        document.addEventListener('DOMContentLoaded', iniciarObserver);
+        return;
+    }
     const observer = new MutationObserver(() => {
         if (document.getElementById("mapa-dinamico-container")) {
             observer.disconnect();
             iniciarMapaDinamico();
         }
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(target, { childList: true, subtree: true });
+}
+
+// Si el div ya existe, ejecuta directamente
+if (document.getElementById("mapa-dinamico-container")) {
+    iniciarMapaDinamico();
+} else {
+    iniciarObserver();
 } 

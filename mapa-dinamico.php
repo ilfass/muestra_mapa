@@ -3,7 +3,7 @@
  * Plugin Name: Mapa Dinámico
  * Description: Muestra un mapa interactivo con datos de Google Sheets usando LeafletJS.
  * Version: 1.0.1
- * Author: Tu Nombre
+ * Author: Fabian Ariel de Haro
  * 
  * Características:
  * - Genérico: funciona con cualquier hoja de cálculo pública
@@ -30,9 +30,8 @@ function mapa_dinamico_enqueue_assets() {
     // Script principal desde jsDelivr (CDN)
     wp_enqueue_script(
         'mapa-dinamico-js',
-        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@main/js/mapa-dinamico.js',
+        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@1046d58/js/mapa-dinamico.js',
         ['leaflet-js', 'leaflet-markercluster-js'],
-        '1.0.3',
         true
     );
 
