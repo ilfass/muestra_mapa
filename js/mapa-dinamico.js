@@ -91,67 +91,83 @@ function cleanText(text) {
         .toLowerCase();
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
-  const container = document.querySelector("#mapa-dinamico-container");
-  if (!container) return console.error("⚠️ No se encontró el contenedor del mapa");
+function iniciarMapaDinamico() {
+    const container = document.getElementById("mapa-dinamico-container");
+    if (!container) return;
 
-  const sheetId = container.dataset.sheetId;
-  if (!sheetId) return console.error("⚠️ Falta el atributo data-sheet-id");
+    const sheetId = container.dataset.sheetId;
+    if (!sheetId) return console.error("Falta el atributo data-sheet-id");
 
-  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+    // Crear el div interno para Leaflet
+    let mapDiv = document.createElement("div");
+    mapDiv.id = "map";
+    mapDiv.style.height = container.style.height || "500px";
+    container.appendChild(mapDiv);
 
-  try {
-    const response = await fetch(url);
-    const text = await response.text();
-    const rawJson = text.substring(47).slice(0, -2);
-    const parsed = JSON.parse(rawJson);
+    const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
 
-    const cols = parsed.table.cols.map(c => c.label.trim());
-    const rows = parsed.table.rows.map(r => {
-      const obj = {};
-      r.c.forEach((cell, i) => {
-        obj[cols[i]] = cleanText(cell?.v ?? '');
-      });
-      return obj;
-    });
-
-    const map = L.map("mapa-dinamico-container").setView([0, 0], 2);
+    const map = L.map("map").setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '&copy; OpenStreetMap contributors'
+      attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    // Geolocalizar cada universidad por nombre
-    rows.forEach((entry, index) => {
-      const nombreUni = entry["Universidad Contraparte"];
-      if (nombreUni) {
-        setTimeout(() => {
-          fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nombreUni)}&format=json&limit=1`)
-            .then(res => res.json())
-            .then(data => {
-              if (data.length) {
-                const { lat, lon } = data[0];
-                // Generar popup genérico excluyendo ciertos campos
-                let popupContent = '<table style="font-size:1em;">';
-                for (const key in entry) {
-                  if (!entry[key]) continue;
-                  if (["Latitud", "Longitud", "Enlace a OpenStreetMap"].includes(key)) continue;
-                  let valor = entry[key];
-                  if (/^https?:\/\/\S+$/i.test(valor)) {
-                    valor = `<a href="${valor}" target="_blank">${valor}</a>`;
-                  }
-                  popupContent += `<tr><td style="font-weight:bold;vertical-align:top;">${key}:</td><td>${valor}</td></tr>`;
-                }
-                popupContent += '</table>';
-                L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
-              } else {
-                console.warn("No se encontró ubicación para:", nombreUni);
-              }
-            });
-        }, index * 1000); // delay para evitar ser bloqueado por Nominatim
-      }
-    });
+    fetch(sheetUrl)
+      .then(res => res.ok ? res.text() : Promise.reject("Error al cargar hoja"))
+      .then(text => {
+        const json = JSON.parse(text.substr(47).slice(0, -2));
+        const cols = json.table.cols.map(col => col.label);
+        const rows = json.table.rows.map(row => {
+          const obj = {};
+          row.c.forEach((cell, i) => {
+            obj[cols[i]] = cell?.v || "";
+          });
+          return obj;
+        });
 
-  } catch (err) {
-    console.error("❌ Error al procesar el sheet:", err);
-  }
-}); 
+        // Geolocalizar cada universidad por nombre
+        rows.forEach((entry, index) => {
+          const nombreUni = entry["Universidad Contraparte"];
+          if (nombreUni) {
+            setTimeout(() => {
+              fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nombreUni)}&format=json&limit=1`)
+                .then(res => res.json())
+                .then(data => {
+                  if (data.length) {
+                    const { lat, lon } = data[0];
+                    // Generar popup genérico excluyendo ciertos campos
+                    let popupContent = '<table style="font-size:1em;">';
+                    for (const key in entry) {
+                      if (!entry[key]) continue;
+                      if (["Latitud", "Longitud", "Enlace a OpenStreetMap"].includes(key)) continue;
+                      let valor = entry[key];
+                      if (/^https?:\/\/\S+$/i.test(valor)) {
+                        valor = `<a href="${valor}" target="_blank">${valor}</a>`;
+                      }
+                      popupContent += `<tr><td style="font-weight:bold;vertical-align:top;">${key}:</td><td>${valor}</td></tr>`;
+                    }
+                    popupContent += '</table>';
+                    L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
+                  } else {
+                    console.warn("No se encontró ubicación para:", nombreUni);
+                  }
+                });
+            }, index * 1000); // delay para evitar ser bloqueado por Nominatim
+          }
+        });
+      })
+      .catch(err => console.error(err));
+}
+
+// Si el div ya existe, ejecuta directamente
+if (document.getElementById("mapa-dinamico-container")) {
+    iniciarMapaDinamico();
+} else {
+    // Si no, espera a que aparezca en el DOM
+    const observer = new MutationObserver(() => {
+        if (document.getElementById("mapa-dinamico-container")) {
+            observer.disconnect();
+            iniciarMapaDinamico();
+        }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+} 
