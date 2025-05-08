@@ -120,29 +120,36 @@ document.addEventListener("DOMContentLoaded", async () => {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    for (let row of rows) {
-      let name = row["Universidad Contraparte"] || row["Nombre"] || "Sin nombre";
-      let osmUrl = row["Web"] || row["Mapa"];
-      let coords = extractCoordsFromOSMUrl(osmUrl);
-
-      if (!coords && row["Latitud"] && row["Longitud"]) {
-        coords = [parseFloat(row["Latitud"]), parseFloat(row["Longitud"])];
+    // Geolocalizar cada universidad por nombre
+    rows.forEach((entry, index) => {
+      const nombreUni = entry["Universidad Contraparte"];
+      if (nombreUni) {
+        setTimeout(() => {
+          fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nombreUni)}&format=json&limit=1`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.length) {
+                const { lat, lon } = data[0];
+                // Generar popup genérico excluyendo ciertos campos
+                let popupContent = '<table style="font-size:1em;">';
+                for (const key in entry) {
+                  if (!entry[key]) continue;
+                  if (["Latitud", "Longitud", "Enlace a OpenStreetMap"].includes(key)) continue;
+                  let valor = entry[key];
+                  if (/^https?:\/\/\S+$/i.test(valor)) {
+                    valor = `<a href="${valor}" target="_blank">${valor}</a>`;
+                  }
+                  popupContent += `<tr><td style="font-weight:bold;vertical-align:top;">${key}:</td><td>${valor}</td></tr>`;
+                }
+                popupContent += '</table>';
+                L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
+              } else {
+                console.warn("No se encontró ubicación para:", nombreUni);
+              }
+            });
+        }, index * 1000); // delay para evitar ser bloqueado por Nominatim
       }
-
-      if (!coords) {
-        coords = await geocodeAddress(name || row["País"]);
-        await new Promise(resolve => setTimeout(resolve, MapaDinamico.geocodingDelay));
-      }
-
-      if (coords) {
-        const color = colorFromString(row["País"] || "");
-        L.marker(coords, { icon: createColoredIcon(color) })
-          .addTo(map)
-          .bindPopup(`<strong>${name}</strong><br>${row["País"] || ""}`);
-      } else {
-        debugLog(`❌ No se pudo geolocalizar:`, name);
-      }
-    }
+    });
 
   } catch (err) {
     console.error("❌ Error al procesar el sheet:", err);
