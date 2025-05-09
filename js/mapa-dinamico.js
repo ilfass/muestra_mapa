@@ -52,25 +52,39 @@ function extractCoordsFromOSMUrl(url) {
 }
 
 async function geocodeAddress(query, retries = 0) {
-  const url = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(query)}&format=json&limit=1`;
-  debugLog('🔍 Geocodificando:', query);
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.length > 0) {
-      return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-    } else {
-      return null;
+    const proxyUrl = 'https://corsproxy.io/?';
+    const nominatimUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    const url = proxyUrl + encodeURIComponent(nominatimUrl);
+    
+    debugLog('🔍 Geocodificando:', query);
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Universidad de Chile - Mapa de Convenios (https://internacionales.uchile.cl)',
+                'Origin': window.location.origin
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data && data.length > 0) {
+            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+        }
+    } catch (error) {
+        if (retries < MapaDinamico.maxRetries) {
+            debugLog(`⚠️ Reintentando geocodificación (${retries + 1}/${MapaDinamico.maxRetries}): ${query}`);
+            await new Promise(resolve => setTimeout(resolve, MapaDinamico.geocodingDelay));
+            return geocodeAddress(query, retries + 1);
+        } else {
+            console.error('❌ Falló la geocodificación después de', MapaDinamico.maxRetries, 'intentos:', query, error);
+            return null;
+        }
     }
-  } catch (err) {
-    if (retries < MapaDinamico.maxRetries) {
-      debugLog(`⚠️ Reintentando geocodificación: ${query}`);
-      return new Promise(resolve => setTimeout(() => resolve(geocodeAddress(query, retries + 1)), 1000));
-    } else {
-      console.error('❌ Falló la geocodificación:', query, err);
-      return null;
-    }
-  }
+    return null;
 }
 
 function iniciarMapaDinamico() {
@@ -215,17 +229,18 @@ async function getCoords(entry) {
 }
 
 async function getCountryCoords(country) {
+    const proxyUrl = 'https://corsproxy.io/?';
+    const nominatimUrl = `${MapaDinamico.nominatimUrl}?country=${encodeURIComponent(country)}&format=json&limit=1`;
+    const url = proxyUrl + encodeURIComponent(nominatimUrl);
+    
     try {
-        const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?country=${encodeURIComponent(country)}&format=json&limit=1`,
-            {
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'Universidad de Chile - Mapa de Convenios (https://internacionales.uchile.cl)',
-                    'Referer': window.location.origin
-                }
+        const response = await fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'Universidad de Chile - Mapa de Convenios (https://internacionales.uchile.cl)',
+                'Origin': window.location.origin
             }
-        );
+        });
         
         if (!response.ok) {
             throw new Error(`Error HTTP: ${response.status}`);
