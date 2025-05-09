@@ -51,14 +51,21 @@ function extractCoordsFromOSMUrl(url) {
   return null;
 }
 
-async function geocodeAddress(query, retries = 0) {
-    const proxyUrl = 'https://api.allorigins.win/raw?url=';
-    const nominatimUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(query)}&format=json&limit=1`;
-    const url = proxyUrl + encodeURIComponent(nominatimUrl);
+const CORS_PROXIES = [
+    'https://corsproxy.io/?',
+    'https://api.allorigins.win/raw?url=',
+    'https://cors-anywhere.herokuapp.com/',
+    'https://api.codetabs.com/v1/proxy?quest='
+];
+
+async function tryWithProxy(url, proxyIndex = 0) {
+    if (proxyIndex >= CORS_PROXIES.length) {
+        throw new Error('Todos los proxies fallaron');
+    }
     
-    debugLog('🔍 Geocodificando:', query);
+    const proxyUrl = CORS_PROXIES[proxyIndex] + encodeURIComponent(url);
     try {
-        const response = await fetch(url, {
+        const response = await fetch(proxyUrl, {
             headers: {
                 'Accept': 'application/json',
                 'User-Agent': 'Universidad de Chile - Mapa de Convenios (https://internacionales.uchile.cl)',
@@ -72,13 +79,25 @@ async function geocodeAddress(query, retries = 0) {
             throw new Error(`Error HTTP: ${response.status}`);
         }
         
-        const data = await response.json();
+        return await response.json();
+    } catch (error) {
+        debugLog(`⚠️ Proxy ${proxyIndex + 1} falló, intentando siguiente...`);
+        return tryWithProxy(url, proxyIndex + 1);
+    }
+}
+
+async function geocodeAddress(query, retries = 0) {
+    const nominatimUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(query)}&format=json&limit=1`;
+    
+    debugLog('🔍 Geocodificando:', query);
+    try {
+        const data = await tryWithProxy(nominatimUrl);
         if (data && data.length > 0) {
             return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
         }
     } catch (error) {
         if (retries < MapaDinamico.maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, retries), 10000); // Backoff exponencial
+            const delay = Math.min(1000 * Math.pow(2, retries), 10000);
             debugLog(`⚠️ Reintentando geocodificación (${retries + 1}/${MapaDinamico.maxRetries}) después de ${delay}ms: ${query}`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return geocodeAddress(query, retries + 1);
@@ -232,26 +251,10 @@ async function getCoords(entry) {
 }
 
 async function getCountryCoords(country) {
-    const proxyUrl = 'https://api.allorigins.win/raw?url=';
     const nominatimUrl = `${MapaDinamico.nominatimUrl}?country=${encodeURIComponent(country)}&format=json&limit=1`;
-    const url = proxyUrl + encodeURIComponent(nominatimUrl);
     
     try {
-        const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'Universidad de Chile - Mapa de Convenios (https://internacionales.uchile.cl)',
-                'Origin': window.location.origin
-            },
-            mode: 'cors',
-            cache: 'no-cache'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Error HTTP: ${response.status}`);
-        }
-        
-        const data = await response.json();
+        const data = await tryWithProxy(nominatimUrl);
         if (data && data.length > 0) {
             return {
                 lat: parseFloat(data[0].lat),
