@@ -149,7 +149,7 @@ function mapa_dinamico_shortcode($atts) {
                 <option value="">Todos los países</option>
             </select>
         </div>
-        <div id="mapa-dinamico" class="mapa-dinamico" data-sheet-id="<?php echo esc_attr($atts['sheet']); ?>"></div>
+        <div id="mapa-dinamico-container" class="mapa-dinamico" data-sheet-id="<?php echo esc_attr($atts['sheet']); ?>"></div>
     </div>
     <?php
     return ob_get_clean();
