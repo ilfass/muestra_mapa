@@ -30,7 +30,7 @@ function mapa_dinamico_enqueue_assets() {
     // Script principal desde jsDelivr (CDN)
     wp_enqueue_script(
         'mapa-dinamico-js',
-        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@1046d58/js/mapa-dinamico.js',
+        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@6dd8cd6/js/mapa-dinamico.js?ver=' . time(),
         ['leaflet-js', 'leaflet-markercluster-js'],
         true
     );
