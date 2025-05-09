@@ -212,4 +212,34 @@ async function getCoords(entry) {
     // 4. Si tampoco se encuentra, mostrar error
     Logger.warn(`⚠️ No se pudieron obtener coordenadas para: ${entry["Universidad Contraparte"]}`);
     return null;
+}
+
+async function getCountryCoords(country) {
+    try {
+        // Usar un proxy CORS para evitar problemas de CORS
+        const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+        const nominatimUrl = `https://nominatim.openstreetmap.org/search?country=${encodeURIComponent(country)}&format=json&limit=1`;
+        
+        const response = await fetch(proxyUrl + nominatimUrl, {
+            headers: {
+                'User-Agent': 'Universidad de Chile - Mapa de Convenios',
+                'Origin': window.location.origin
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        if (data && data.length > 0) {
+            return {
+                lat: parseFloat(data[0].lat),
+                lon: parseFloat(data[0].lon)
+            };
+        }
+    } catch (error) {
+        Logger.error(`❌ Error al obtener coordenadas del país ${country}:`, error);
+    }
+    return null;
 } 
