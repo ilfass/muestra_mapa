@@ -10,6 +10,9 @@ Plugin de WordPress para mostrar un mapa interactivo con datos de Google Sheets 
 - 🌐 Filtros por país
 - 🎨 Diseño responsive y personalizable
 - 📱 Compatible con dispositivos móviles
+- 📊 Sistema de logging avanzado
+- ⏱️ Rate limiting para geocodificación
+- 🔒 Manejo seguro de errores
 
 ## Instalación
 
@@ -49,6 +52,17 @@ El plugin incluye estilos CSS personalizables. Puedes sobrescribirlos en tu tema
     /* Estilos del selector de países */
 }
 ```
+
+### Sistema de Logging
+
+El plugin incluye un sistema de logging avanzado que registra:
+- Información de inicialización
+- Errores de carga de datos
+- Advertencias de geocodificación
+- Eventos de caché
+- Errores de configuración
+
+Los logs se pueden ver en la consola del navegador con el prefijo correspondiente al módulo.
 
 ## Versiones
 
