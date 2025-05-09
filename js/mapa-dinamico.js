@@ -166,4 +166,50 @@ if (document.getElementById("mapa-dinamico-container")) {
     iniciarMapaDinamico();
 } else {
     iniciarObserver();
+}
+
+async function getCoords(entry) {
+    let coords = null;
+
+    // 1. Si tiene coordenadas explícitas
+    const lat = entry["latitud"];
+    const lon = entry["longitud"];
+    if (lat && lon) {
+        coords = {
+            lat: parseFloat(lat),
+            lon: parseFloat(lon)
+        };
+        if (!isNaN(coords.lat) && !isNaN(coords.lon)) {
+            Logger.info(`📍 Usando coordenadas de lat/lon para: ${entry["Universidad Contraparte"]}`);
+            return coords;
+        }
+    }
+
+    // 2. Si tiene enlace a OpenStreetMap con mlat/mlon
+    const osmLink = entry["Enlace a OpenStreetMap"];
+    if (osmLink) {
+        coords = this.extractCoordsFromOSM(osmLink);
+        if (coords) {
+            Logger.info(`📍 Usando coordenadas de OpenStreetMap para: ${entry["Universidad Contraparte"]}`);
+            return coords;
+        }
+    }
+
+    // 3. Si no se encontró nada, usar país (requiere geocodificación)
+    const country = entry["País"];
+    if (country) {
+        try {
+            coords = await this.getCountryCoords(country);
+            if (coords) {
+                Logger.info(`📍 Usando coordenadas del país para: ${entry["Universidad Contraparte"]} (${country})`);
+                return coords;
+            }
+        } catch (error) {
+            Logger.error(`❌ Error al obtener coordenadas del país ${country}:`, error);
+        }
+    }
+
+    // 4. Si tampoco se encuentra, mostrar error
+    Logger.warn(`⚠️ No se pudieron obtener coordenadas para: ${entry["Universidad Contraparte"]}`);
+    return null;
 } 

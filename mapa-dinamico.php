@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Mapa Dinámico
  * Description: Muestra un mapa interactivo con datos de Google Sheets usando LeafletJS.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Fabian Ariel de Haro
  * 
  * Características:
@@ -30,16 +30,19 @@ function mapa_dinamico_enqueue_assets() {
     // Script principal desde jsDelivr (CDN)
     wp_enqueue_script(
         'mapa-dinamico-js',
-        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@6dd8cd6/js/mapa-dinamico.js?ver=' . time(),
+        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@6dd8cd6/js/mapa-dinamico.js',
         ['leaflet-js', 'leaflet-markercluster-js'],
+        time(),
         true
     );
 
     // Configuración global
     wp_localize_script('mapa-dinamico-js', 'MapaDinamico', [
-        'geocodingDelay' => 500,
+        'geocodingDelay' => 1000,
         'nominatimUrl' => 'https://nominatim.openstreetmap.org/search',
-        'ajaxUrl' => admin_url('admin-ajax.php')
+        'maxRetries' => 3,
+        'chunkSize' => 3,
+        'debug' => true
     ]);
 }
 add_action('wp_enqueue_scripts', 'mapa_dinamico_enqueue_assets');
@@ -124,6 +127,14 @@ function mapa_dinamico_styles() {
                 width: 100%;
                 min-width: 100%;
             }
+        }
+        #mapa-dinamico .custom-marker {
+            cursor: pointer;
+        }
+
+        .leaflet-popup-content {
+            font-size: 14px;
+            line-height: 1.4;
         }
     </style>
     <?php
