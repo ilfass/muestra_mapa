@@ -1,5 +1,5 @@
 /**
- * Mapa Dinámico - JS v1.4.2
+ * Mapa Dinámico - JS v1.4.2 (Versión Funcional y Estable)
  * Fecha: 2025-05-07
  * 
  * - Compatible con cualquier Google Sheet público
