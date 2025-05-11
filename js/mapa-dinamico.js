@@ -1,54 +1,88 @@
 /**
- * Mapa Dinámico - JS v1.4.2 (Versión Funcional y Estable)
- * Fecha: 2025-05-07
+ * Mapa Dinámico - JS v1.5.0 (Versión Optimizada)
+ * Fecha: 2024-03-19
  * 
  * - Compatible con cualquier Google Sheet público
  * - Geocodificación con Nominatim (OpenStreetMap)
- * - Prioriza URL OSM > Lat/Lng > País
- * - Marca con color por país
+ * - Sistema de caché para coordenadas
+ * - Clustering de marcadores
+ * - Procesamiento optimizado en chunks
  * - Control de errores y debug activable
  */
 
 if (typeof MapaDinamico === 'undefined') {
   console.warn("MapaDinamico config no encontrada. Se define por defecto.");
   var MapaDinamico = {
-    geocodingDelay: 1500,
+    geocodingDelay: 500,
     nominatimUrl: 'https://nominatim.openstreetmap.org/search',
     maxRetries: 3,
-    chunkSize: 3,
-    debug: true
+    chunkSize: 5,
+    debug: true,
+    cacheEnabled: true,
+    maxClusterRadius: 50,
+    spiderfyOnMaxZoom: true
   };
 }
 
+// Sistema de caché
+const CoordenadasCache = {
+    get: function(key) {
+        if (!MapaDinamico.cacheEnabled) return null;
+        try {
+            const cached = localStorage.getItem(`coord_${key}`);
+            return cached ? JSON.parse(cached) : null;
+        } catch (e) {
+            console.warn('Error al leer caché:', e);
+            return null;
+        }
+    },
+    set: function(key, value) {
+        if (!MapaDinamico.cacheEnabled) return;
+        try {
+            localStorage.setItem(`coord_${key}`, JSON.stringify(value));
+        } catch (e) {
+            console.warn('Error al guardar en caché:', e);
+        }
+    }
+};
+
 function debugLog(...args) {
-  if (MapaDinamico.debug) console.log('[MapaDinamico]', ...args);
+    if (MapaDinamico.debug) console.log('[MapaDinamico]', ...args);
 }
 
 function colorFromString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  let color = '#';
-  for (let i = 0; i < 3; i++) {
-    let value = (hash >> (i * 8)) & 0xFF;
-    color += ('00' + value.toString(16)).substr(-2);
-  }
-  return color;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    let color = '#';
+    for (let i = 0; i < 3; i++) {
+        let value = (hash >> (i * 8)) & 0xFF;
+        color += ('00' + value.toString(16)).substr(-2);
+    }
+    return color;
 }
 
 function createColoredIcon(color) {
-  return L.divIcon({
-    className: 'custom-marker',
-    html: `<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px #000;"></div>`
-  });
+    return L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="background:${color};width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 4px #000;"></div>`
+    });
 }
 
-function extractCoordsFromOSMUrl(url) {
-  if (!url) return null;
-  const match = url.match(/[?&]mlat=(-?\d+\.\d+)&mlon=(-?\d+\.\d+)/);
-  if (match) return [parseFloat(match[1]), parseFloat(match[2])];
-  return null;
+function generatePopupContent(entry) {
+    let popupContent = '<table style="font-size:1em;">';
+    for (const key in entry) {
+        if (!entry[key]) continue;
+        if (["Latitud", "Longitud", "Enlace a OpenStreetMap"].includes(key)) continue;
+        let valor = entry[key];
+        if (/^https?:\/\/\S+$/i.test(valor)) {
+            valor = `<a href="${valor}" target="_blank">${valor}</a>`;
+        }
+        popupContent += `<tr><td style="font-weight:bold;vertical-align:top;">${key}:</td><td>${valor}</td></tr>`;
+    }
+    popupContent += '</table>';
+    return popupContent;
 }
 
 const CORS_PROXIES = [
@@ -87,17 +121,26 @@ async function tryWithProxy(url, proxyIndex = 0) {
 }
 
 async function geocodeAddress(query, retries = 0) {
+    // Verificar caché primero
+    const cached = CoordenadasCache.get(query);
+    if (cached) {
+        debugLog('📍 Usando coordenadas en caché para:', query);
+        return cached;
+    }
+
     const nominatimUrl = `${MapaDinamico.nominatimUrl}?q=${encodeURIComponent(query)}&format=json&limit=1`;
     
     debugLog('🔍 Geocodificando:', query);
     try {
         const data = await tryWithProxy(nominatimUrl);
         if (data && data.length > 0) {
-            return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+            const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+            CoordenadasCache.set(query, coords);
+            return coords;
         }
     } catch (error) {
         if (retries < MapaDinamico.maxRetries) {
-            const delay = Math.min(1000 * Math.pow(2, retries), 10000);
+            const delay = Math.min(500 * Math.pow(2, retries), 5000);
             debugLog(`⚠️ Reintentando geocodificación (${retries + 1}/${MapaDinamico.maxRetries}) después de ${delay}ms: ${query}`);
             await new Promise(resolve => setTimeout(resolve, delay));
             return geocodeAddress(query, retries + 1);
@@ -109,6 +152,33 @@ async function geocodeAddress(query, retries = 0) {
     return null;
 }
 
+async function processDataInChunks(rows, map, markerClusterGroup) {
+    const chunks = [];
+    for (let i = 0; i < rows.length; i += MapaDinamico.chunkSize) {
+        chunks.push(rows.slice(i, i + MapaDinamico.chunkSize));
+    }
+
+    for (const chunk of chunks) {
+        await Promise.all(chunk.map(async (entry) => {
+            const nombreUni = entry["Universidad Contraparte"];
+            if (!nombreUni) return;
+
+            const coords = await getCoords(entry);
+            if (coords) {
+                const color = colorFromString(entry["País"] || nombreUni);
+                const marker = L.marker([coords.lat, coords.lon], {
+                    icon: createColoredIcon(color)
+                }).bindPopup(generatePopupContent(entry));
+                
+                markerClusterGroup.addLayer(marker);
+            }
+        }));
+        
+        // Pequeña pausa entre chunks para evitar sobrecarga
+        await new Promise(resolve => setTimeout(resolve, MapaDinamico.geocodingDelay));
+    }
+}
+
 function iniciarMapaDinamico() {
     const container = document.getElementById("mapa-dinamico-container");
     if (!container) return;
@@ -116,7 +186,6 @@ function iniciarMapaDinamico() {
     const sheetId = container.dataset.sheetId;
     if (!sheetId) return console.error("Falta el atributo data-sheet-id");
 
-    // Crear el div interno para Leaflet
     let mapDiv = document.createElement("div");
     mapDiv.id = "map";
     mapDiv.style.height = container.style.height || "500px";
@@ -126,54 +195,34 @@ function iniciarMapaDinamico() {
 
     const map = L.map("map").setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: "&copy; OpenStreetMap contributors"
+        attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    fetch(sheetUrl)
-      .then(res => res.ok ? res.text() : Promise.reject("Error al cargar hoja"))
-      .then(text => {
-        const json = JSON.parse(text.substr(47).slice(0, -2));
-        const cols = json.table.cols.map(col => col.label);
-        const rows = json.table.rows.map(row => {
-          const obj = {};
-          row.c.forEach((cell, i) => {
-            obj[cols[i]] = cell?.v || "";
-          });
-          return obj;
-        });
+    // Configurar clustering
+    const markerClusterGroup = L.markerClusterGroup({
+        maxClusterRadius: MapaDinamico.maxClusterRadius,
+        spiderfyOnMaxZoom: MapaDinamico.spiderfyOnMaxZoom,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true
+    });
+    map.addLayer(markerClusterGroup);
 
-        // Geolocalizar cada universidad por nombre
-        rows.forEach((entry, index) => {
-          const nombreUni = entry["Universidad Contraparte"];
-          if (nombreUni) {
-            setTimeout(() => {
-              fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nombreUni)}&format=json&limit=1`)
-                .then(res => res.json())
-                .then(data => {
-                  if (data.length) {
-                    const { lat, lon } = data[0];
-                    // Generar popup genérico excluyendo ciertos campos
-                    let popupContent = '<table style="font-size:1em;">';
-                    for (const key in entry) {
-                      if (!entry[key]) continue;
-                      if (["Latitud", "Longitud", "Enlace a OpenStreetMap"].includes(key)) continue;
-                      let valor = entry[key];
-                      if (/^https?:\/\/\S+$/i.test(valor)) {
-                        valor = `<a href="${valor}" target="_blank">${valor}</a>`;
-                      }
-                      popupContent += `<tr><td style="font-weight:bold;vertical-align:top;">${key}:</td><td>${valor}</td></tr>`;
-                    }
-                    popupContent += '</table>';
-                    L.marker([lat, lon]).addTo(map).bindPopup(popupContent);
-                  } else {
-                    console.warn("No se encontró ubicación para:", nombreUni);
-                  }
+    fetch(sheetUrl)
+        .then(res => res.ok ? res.text() : Promise.reject("Error al cargar hoja"))
+        .then(text => {
+            const json = JSON.parse(text.substr(47).slice(0, -2));
+            const cols = json.table.cols.map(col => col.label);
+            const rows = json.table.rows.map(row => {
+                const obj = {};
+                row.c.forEach((cell, i) => {
+                    obj[cols[i]] = cell?.v || "";
                 });
-            }, index * 1000); // delay para evitar ser bloqueado por Nominatim
-          }
-        });
-      })
-      .catch(err => console.error(err));
+                return obj;
+            });
+
+            processDataInChunks(rows, map, markerClusterGroup);
+        })
+        .catch(err => console.error(err));
 }
 
 function iniciarObserver() {
