@@ -10,6 +10,20 @@
  * - Control de errores y debug activable
  */
 
+// Log inicial con información de versión y columnas
+console.log('%c Mapa Dinámico v1.5.0 ', 'background: #4CAF50; color: white; padding: 10px; border-radius: 5px; font-size: 16px;');
+console.log('%c Resumen de Características ', 'background: #4CAF50; color: white; padding: 5px; border-radius: 3px;');
+console.log('✓ Sistema de caché implementado');
+console.log('✓ Clustering de marcadores optimizado');
+console.log('✓ Procesamiento en chunks (tamaño: 5)');
+console.log('✓ Geocodificación con retry y delay');
+console.log('✓ Múltiples proxies CORS');
+console.log('✓ Debug mode activable');
+console.log('✓ Control de errores mejorado');
+console.log('✓ Interfaz responsiva');
+console.log('✓ Marcadores personalizados por país');
+console.log('✓ Popups con formato HTML');
+
 if (typeof MapaDinamico === 'undefined') {
   console.warn("MapaDinamico config no encontrada. Se define por defecto.");
   var MapaDinamico = {
