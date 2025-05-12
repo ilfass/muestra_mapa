@@ -8,21 +8,53 @@
  * - Clustering de marcadores
  * - Procesamiento optimizado en chunks
  * - Control de errores y debug activable
+ * - prrueba 2
  */
 
-// Log inicial con información de versión y columnas
-console.log('%c Mapa Dinámico v1.5.0 ', 'background: #4CAF50; color: white; padding: 10px; border-radius: 5px; font-size: 16px;');
-console.log('%c Resumen de Características ', 'background: #4CAF50; color: white; padding: 5px; border-radius: 3px;');
-console.log('✓ Sistema de caché implementado');
-console.log('✓ Clustering de marcadores optimizado');
-console.log('✓ Procesamiento en chunks (tamaño: 5)');
-console.log('✓ Geocodificación con retry y delay');
-console.log('✓ Múltiples proxies CORS');
-console.log('✓ Debug mode activable');
-console.log('✓ Control de errores mejorado');
-console.log('✓ Interfaz responsiva');
-console.log('✓ Marcadores personalizados por país');
-console.log('✓ Popups con formato HTML');
+const Logger = {
+    info: (...args) => console.info(...args),
+    warn: (...args) => console.warn(...args),
+    error: (...args) => console.error(...args)
+};
+
+// Validador automático de logs esperados
+(function() {
+    const expectedLogs = [
+        'Mapa Dinámico v1.5.0',
+        'Resumen de Características',
+        '✓ Sistema de caché implementado',
+        '✓ Clustering de marcadores optimizado',
+        '✓ Procesamiento en chunks (tamaño: 5)',
+        '✓ Geocodificación con retry y delay',
+        '✓ Múltiples proxies CORS',
+        '✓ Debug mode activable',
+        '✓ Control de errores mejorado',
+        '✓ Interfaz responsiva',
+        '✓ Marcadores personalizados por país',
+        '✓ Popups con formato HTML'
+    ];
+    const found = {};
+    expectedLogs.forEach(msg => found[msg] = false);
+    const origLog = console.log;
+    console.log = function(...args) {
+        expectedLogs.forEach(msg => {
+            if (args[0] && args[0].toString().includes(msg)) {
+                found[msg] = true;
+            }
+        });
+        origLog.apply(console, args);
+    };
+    window.addEventListener('load', function() {
+        origLog('%c\nResumen de logs esperados:', 'font-weight:bold; font-size:16px;');
+        expectedLogs.forEach(msg => {
+            if (found[msg]) {
+                origLog(`%c✔️ ${msg}`, 'color:green; font-weight:bold;');
+            } else {
+                origLog(`%c❌ ${msg}`, 'color:red; font-weight:bold;');
+            }
+        });
+    });
+})();
 
 if (typeof MapaDinamico === 'undefined') {
   console.warn("MapaDinamico config no encontrada. Se define por defecto.");
@@ -174,8 +206,11 @@ async function processDataInChunks(rows, map, markerClusterGroup) {
 
     for (const chunk of chunks) {
         await Promise.all(chunk.map(async (entry) => {
-            const nombreUni = entry["Universidad Contraparte"];
-            if (!nombreUni) return;
+            const pais = entry["País"];
+            const lat = entry["Latitud"] || entry["latitud"];
+            const lon = entry["Longitud"] || entry["longitud"];
+            
+            if (!lat && !lon && !pais) return; // No hay datos suficientes, salta
 
             const coords = await getCoords(entry);
             if (coords) {
@@ -197,20 +232,22 @@ function iniciarMapaDinamico() {
     const container = document.getElementById("mapa-dinamico-container");
     if (!container) return;
 
+    // Limpia el contenedor antes de crear el mapa
+    container.innerHTML = "";
+    if (window._leaflet_map) {
+        window._leaflet_map.remove();
+        window._leaflet_map = null;
+    }
+    window._leaflet_map = L.map("mapa-dinamico-container").setView([0, 0], 2);
+
     const sheetId = container.dataset.sheetId;
     if (!sheetId) return console.error("Falta el atributo data-sheet-id");
 
-    let mapDiv = document.createElement("div");
-    mapDiv.id = "map";
-    mapDiv.style.height = container.style.height || "500px";
-    container.appendChild(mapDiv);
-
     const sheetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
 
-    const map = L.map("map").setView([0, 0], 2);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors"
-    }).addTo(map);
+    }).addTo(window._leaflet_map);
 
     // Configurar clustering
     const markerClusterGroup = L.markerClusterGroup({
@@ -219,7 +256,7 @@ function iniciarMapaDinamico() {
         showCoverageOnHover: false,
         zoomToBoundsOnClick: true
     });
-    map.addLayer(markerClusterGroup);
+    window._leaflet_map.addLayer(markerClusterGroup);
 
     fetch(sheetUrl)
         .then(res => res.ok ? res.text() : Promise.reject("Error al cargar hoja"))
@@ -234,7 +271,7 @@ function iniciarMapaDinamico() {
                 return obj;
             });
 
-            processDataInChunks(rows, map, markerClusterGroup);
+            processDataInChunks(rows, window._leaflet_map, markerClusterGroup);
         })
         .catch(err => console.error(err));
 }
@@ -260,11 +297,33 @@ function iniciarObserver() {
     observer.observe(target, { childList: true, subtree: true });
 }
 
-// Si el div ya existe, ejecuta directamente
-if (document.getElementById("mapa-dinamico-container")) {
-    iniciarMapaDinamico();
-} else {
-    iniciarObserver();
+function ready(fn) {
+    if (document.readyState !== 'loading') {
+        fn();
+    } else {
+        document.addEventListener('DOMContentLoaded', fn);
+    }
+}
+
+ready(() => {
+    if (document.getElementById("mapa-dinamico-container")) {
+        iniciarMapaDinamico();
+    } else {
+        iniciarObserver();
+    }
+});
+
+function extractCoordsFromOSM(url) {
+    // Busca parámetros mlat/mlon o lat/lon en la URL de OpenStreetMap
+    const mlat = url.match(/[?&](mlat|lat)=([\d\.\-]+)/i);
+    const mlon = url.match(/[?&](mlon|lon)=([\d\.\-]+)/i);
+    if (mlat && mlon) {
+        return {
+            lat: parseFloat(mlat[2]),
+            lon: parseFloat(mlon[2])
+        };
+    }
+    return null;
 }
 
 async function getCoords(entry) {
@@ -279,7 +338,7 @@ async function getCoords(entry) {
             lon: parseFloat(lon)
         };
         if (!isNaN(coords.lat) && !isNaN(coords.lon)) {
-            Logger.info(`📍 Usando coordenadas de lat/lon para: ${entry["Universidad Contraparte"]}`);
+            Logger.info(`📍 Usando coordenadas de lat/lon para: ${entry["Universidad Contraparte"] || entry["País"] || "Sin nombre"}`);
             return coords;
         }
     }
@@ -287,7 +346,7 @@ async function getCoords(entry) {
     // 2. Si tiene enlace a OpenStreetMap con mlat/mlon
     const osmLink = entry["Enlace a OpenStreetMap"];
     if (osmLink) {
-        coords = this.extractCoordsFromOSM(osmLink);
+        coords = extractCoordsFromOSM(osmLink);
         if (coords) {
             Logger.info(`📍 Usando coordenadas de OpenStreetMap para: ${entry["Universidad Contraparte"]}`);
             return coords;
@@ -300,7 +359,7 @@ async function getCoords(entry) {
         try {
             coords = await this.getCountryCoords(country);
             if (coords) {
-                Logger.info(`📍 Usando coordenadas del país para: ${entry["Universidad Contraparte"]} (${country})`);
+                Logger.info(`📍 Usando coordenadas del país para: ${entry["Universidad Contraparte"] || country}`);
                 return coords;
             }
         } catch (error) {
