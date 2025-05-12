@@ -1,6 +1,24 @@
 # Mapa Dinámico para WordPress
 
+✨ **¡Versión funcional estable!** 🟢🟢🟢
+
 Plugin de WordPress para mostrar un mapa interactivo con datos de Google Sheets usando LeafletJS.
+
+---
+
+## 🚀 Mejoras y Cambios Recientes
+
+- 🟩 **Inicialización robusta:** El mapa solo se crea cuando el contenedor está presente y el DOM está listo.
+- 🟢 **Logs automáticos:** Validación automática de logs esperados en la consola, con resumen visual (✔️/❌).
+- 🟦 **Sistema de caché:** Coordenadas cacheadas en localStorage para acelerar la carga.
+- 🟧 **Clustering de marcadores:** Agrupación visual de marcadores con estilos personalizados.
+- 🟨 **Procesamiento optimizado en chunks:** Manejo eficiente de grandes volúmenes de datos.
+- 🟠 **Geocodificación optimizada:** Uso de múltiples proxies y reintentos inteligentes.
+- 🟣 **Control de errores mejorado:** Logging avanzado y advertencias claras en consola.
+- 🟤 **Código modular y limpio:** Separación de funciones, fácil de mantener y extender.
+- 🟡 **Validación visual:** Resumen de logs esperados al cargar la página, para asegurar que todo funciona.
+
+---
 
 ## Características
 
@@ -13,6 +31,11 @@ Plugin de WordPress para mostrar un mapa interactivo con datos de Google Sheets 
 - 📊 Sistema de logging avanzado
 - ⏱️ Rate limiting para geocodificación
 - 🔒 Manejo seguro de errores
+- 🟦 Clustering de marcadores
+- 🟨 Procesamiento optimizado en chunks
+- 🟢 Validación automática de logs en consola
+
+---
 
 ## Instalación
 
@@ -32,6 +55,8 @@ Plugin de WordPress para mostrar un mapa interactivo con datos de Google Sheets 
 La hoja de cálculo debe tener las siguientes columnas:
 - `Universidad Contraparte` o `Nombre`: Nombre de la institución a geolocalizar
 - `País`: País de la institución (para filtros)
+- `Latitud` y `Longitud` (opcional): Coordenadas directas
+- `Enlace a OpenStreetMap` (opcional): Para extraer coordenadas
 - Cualquier otra columna se mostrará en el popup del marcador
 
 ### Personalización
@@ -53,22 +78,25 @@ El plugin incluye estilos CSS personalizables. Puedes sobrescribirlos en tu tema
 }
 ```
 
-### Sistema de Logging
+### Sistema de Logging y Validación
 
-El plugin incluye un sistema de logging avanzado que registra:
-- Información de inicialización
-- Errores de carga de datos
-- Advertencias de geocodificación
-- Eventos de caché
-- Errores de configuración
+- El plugin incluye un sistema de logging avanzado que registra:
+  - Información de inicialización
+  - Errores de carga de datos
+  - Advertencias de geocodificación
+  - Eventos de caché
+  - Errores de configuración
+- **Validación automática de logs:** Al cargar la página, verás un resumen de logs esperados en la consola con ✔️ (verde) o ❌ (rojo) para cada mensaje clave.
 
-Los logs se pueden ver en la consola del navegador con el prefijo correspondiente al módulo.
+---
 
 ## Versiones
 
-- Plugin: 1.0.0
-- JavaScript: 1.0.0
+- Plugin: 1.5.0
+- JavaScript: 1.5.0
 - Leaflet: 1.9.3
+
+---
 
 ## Contribuir
 
