@@ -12,6 +12,7 @@
  * - Filtros por país
  * - Código modular y versionado
  * - Manejo de errores robusto
+ * - Prueba 1
  */
 
 defined('ABSPATH') or die('No script kiddies please!');
@@ -30,7 +31,7 @@ function mapa_dinamico_enqueue_assets() {
     // Script principal desde jsDelivr (CDN)
     wp_enqueue_script(
         'mapa-dinamico-js',
-        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa@6dd8cd6/js/mapa-dinamico.js',
+        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa/js/mapa-dinamico.js',
         ['leaflet-js', 'leaflet-markercluster-js'],
         time(),
         true
@@ -135,6 +136,38 @@ function mapa_dinamico_styles() {
         .leaflet-popup-content {
             font-size: 14px;
             line-height: 1.4;
+        }
+
+        /* Estilos para los clusters */
+        .marker-cluster-small,
+        .marker-cluster-medium,
+        .marker-cluster-large {
+            background-color: rgba(52, 152, 219, 0.6);
+        }
+        .marker-cluster-small div,
+        .marker-cluster-medium div,
+        .marker-cluster-large div {
+            background-color: rgba(52, 152, 219, 0.8);
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            border-radius: 50%;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .marker-cluster-small div {
+            width: 30px;
+            height: 30px;
+        }
+        .marker-cluster-medium div {
+            width: 40px;
+            height: 40px;
+        }
+        .marker-cluster-large div {
+            width: 50px;
+            height: 50px;
         }
     </style>
     <?php
