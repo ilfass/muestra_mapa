@@ -10,9 +10,10 @@
  * - Geolocalización automática usando Nominatim
  * - Sistema de caché para coordenadas en localStorage
  * - Filtros por país
+ * - Filtros por país
  * - Código modular y versionado
  * - Manejo de errores robusto
- * - Prueba 1
+ * - Prueba 3
  */
 
 defined('ABSPATH') or die('No script kiddies please!');
@@ -31,7 +32,7 @@ function mapa_dinamico_enqueue_assets() {
     // Script principal desde jsDelivr (CDN)
     wp_enqueue_script(
         'mapa-dinamico-js',
-        'https://cdn.jsdelivr.net/gh/ilfass/muestra_mapa/js/mapa-dinamico.js',
+        plugins_url('js/mapa-dinamico.js', __FILE__),
         ['leaflet-js', 'leaflet-markercluster-js'],
         time(),
         true
