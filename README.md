@@ -2,6 +2,11 @@
 
 ✨ **¡Versión funcional estable!** 🟢🟢🟢
 
+> **Versión recomendada:**
+> - Tag: `v2024-06-11`
+> - Fecha: 2024-06-11
+> - Estado: FUNCIONAL y validada en producción
+
 Plugin de WordPress para mostrar un mapa interactivo con datos de Google Sheets usando LeafletJS.
 
 ---
